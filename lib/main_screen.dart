@@ -6,6 +6,7 @@ import 'package:untitled/profile_tab.dart';
 // [!!] 1단계에서 만든 '추적' 탭 파일을 가져옵니다.
 import 'emotion_tracking_tab.dart';
 import 'healing_screen.dart';
+import 'diagnosis_screen.dart';
 
 // --- Color Definitions ---
 const Color kColorBgStart = Color(0xFFEFF6FF);
@@ -310,18 +311,32 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
 
                 Row(
                   children: [
+                    // [!!!] 2. '정신건강 진단' 카드를 InkWell로 감쌉니다. [!!!]
                     Expanded(
-                      child: _buildSmallFeatureCard(
-                        iconWidget: Image.asset(
-                          'assets/images/heart_pulse_icon.png',
-                          width: 48.0,
-                          height: 48.0,
-                          errorBuilder: (context, error, stackTrace) =>
-                          const Icon(Icons.error_outline,
-                              color: kColorError, size: 48.0),
+                      child: InkWell(
+                        // [!!] 3. 둥근 모서리 효과를 위해 추가
+                        borderRadius: BorderRadius.circular(16.0),
+                        // [!!] 4. onTap 이벤트 추가
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const DiagnosisScreen(),
+                            ),
+                          );
+                        },
+                        child: _buildSmallFeatureCard(
+                          iconWidget: Image.asset(
+                            'assets/images/heart_pulse_icon.png',
+                            width: 48.0,
+                            height: 48.0,
+                            errorBuilder: (context, error, stackTrace) =>
+                            const Icon(Icons.error_outline,
+                                color: kColorError, size: 48.0),
+                          ),
+                          title: kTexts['mental_health_title']!,
+                          subtitle: kTexts['mental_health_subtitle']!,
                         ),
-                        title: kTexts['mental_health_title']!,
-                        subtitle: kTexts['mental_health_subtitle']!,
                       ),
                     ),
                     const SizedBox(width: 16.0),
