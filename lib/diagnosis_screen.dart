@@ -343,6 +343,22 @@ class DiagnosisTestItem {
   });
 }
 
+// -------------------------------------------------------------------
+// 검사 결과 데이터를 담을 클래스
+// -------------------------------------------------------------------
+class TestResult {
+  final int score;
+  final String title;
+  final String description;
+  final String advice;
+
+  TestResult({
+    required this.score,
+    required this.title,
+    required this.description,
+    required this.advice,
+  });
+}
 
 // -------------------------------------------------------------------
 // 7. 새로운 공통 설문조사 페이지 (StatefulWidget)
@@ -376,7 +392,172 @@ class _SurveyScreenState extends State<SurveyScreen> {
     super.initState();
     _answers = List.filled(widget.questions.length, null);
   }
+  // 3. 점수 평가 로직 함수
+  TestResult _evaluateTest(String testTitle, int totalScore) {
 
+    // 진단에 따라 다른 점수 기준을 적용
+    switch (testTitle) {
+
+    // '우울증' 로직
+      case '우울증 자가진단':
+        if (totalScore >= 10 && totalScore <= 20) {
+          return TestResult(
+              score: totalScore,
+              title: "정상",
+              description: "우울증상이 거의 없습니다.",
+              advice: "현재 상태를 잘 유지하세요.");
+        } else if (totalScore >= 21 && totalScore <= 30) {
+          return TestResult(
+              score: totalScore,
+              title: "경미한 우울",
+              description: "가벼운 우울감이 있습니다.",
+              advice: "기분 전환을 위한 활동을 해보세요.");
+        } else if (totalScore >= 31 && totalScore <= 40) {
+          return TestResult(
+              score: totalScore,
+              title: "위험한 우울",
+              description: "심한 우울 증세를 보입니다.",
+              advice: "심리 상담이나 전문가 도움을 고려해보세요.");
+        } else if (totalScore >= 41 && totalScore <= 50) {
+          return TestResult(
+              score: totalScore,
+              title: "심각한 우울",
+              description: "전문가의 상담이 필요합니다.",
+              advice: "가까운 상담 센터를 방문하세요.");
+        }
+        break;
+
+    // '불안장애' 로직
+      case '불안장애 자가진단':
+        if (totalScore >= 10 && totalScore <= 20) {
+          return TestResult(
+              score: totalScore,
+              title: "정상",
+              description: "불안 수준이 정상 범위입니다.",
+              advice: "건강한 정신 상태를 유지하고 계십니다.");
+        } else if (totalScore >= 21 && totalScore <= 30) {
+          return TestResult(
+              score: totalScore,
+              title: "경미한 불안",
+              description: "약간의 불안 증상이 있습니다.",
+              advice: "이완 기법이나 명상을 통해 불안을 관리해보세요.");
+        } else if (totalScore >= 31 && totalScore <= 40) {
+          return TestResult(
+              score: totalScore,
+              title: "중등도 불안",
+              description: "불안 증상이 의심됩니다.",
+              advice: "심리 상담이나 전문가 도움을 고려해보세요.");
+        } else if (totalScore >= 41 && totalScore <= 50) {
+          return TestResult(
+              score: totalScore,
+              title: "심각한 불안",
+              description: "즉시 전문가 상담이 필요합니다.",
+              advice: "일상생활에 지장을 줄 수 있는 불안 증상이 있습니다.");
+        }
+        break;
+
+    // '스트레스' 로직
+      case '스트레스 자가진단':
+        if (totalScore >= 10 && totalScore <= 20) {
+          return TestResult(
+              score: totalScore,
+              title: "정상",
+              description: "스트레스 수준이 정상 범위입니다.",
+              advice: "건강한 정신 상태를 유지하고 계십니다.");
+        } else if (totalScore >= 21 && totalScore <= 30) {
+          return TestResult(
+              score: totalScore,
+              title: "경미한 스트레스",
+              description: "약간의 스트레스 증상이 있습니다.",
+              advice: "가벼운 명상이나 기록 등을 통해 스트레스를 관리해보세요.");
+        } else if (totalScore >= 31 && totalScore <= 40) {
+          return TestResult(
+              score: totalScore,
+              title: "중등도 스트레스",
+              description: "스트레스 증상이 의심됩니다.",
+              advice: "심리 상담이나 전문가 도움을 고려해보세요.");
+        } else if (totalScore >= 41 && totalScore <= 50) {
+          return TestResult(
+              score: totalScore,
+              title: "심각한 스트레스",
+              description: "즉시 전문가 상담이 필요합니다.",
+              advice: "일상생활에 지장을 줄 수 있는 스트레스 증상이 있습니다.");
+        }
+        break;
+
+    // '자살 위험성' 로직
+      case '자살위험성 평가':
+        if (totalScore >= 10 && totalScore <= 20) {
+          return TestResult(
+              score: totalScore,
+              title: "정상",
+              description: "자살 위험도 수준이 정상 범위입니다.",
+              advice: "건강한 정신 상태를 유지하고 계십니다.");
+        } else if (totalScore >= 21 && totalScore <= 30) {
+          return TestResult(
+              score: totalScore,
+              title: "경미한 위험 단계",
+              description: "약간의 불안 증상이 있습니다.",
+              advice: "이완 기법이나 명상을 통해 불안을 관리해보세요.");
+        } else if (totalScore >= 31 && totalScore <= 40) {
+          return TestResult(
+              score: totalScore,
+              title: "중등도 위험 상태",
+              description: "불안한 자살 위험도 상태가 의심됩니다.",
+              advice: "심리 상담이나 전문가 도움을 고려해보세요.");
+        } else if (totalScore >= 41 && totalScore <= 50) {
+          return TestResult(
+              score: totalScore,
+              title: "심각한 위험 상태",
+              description: "즉시 전문가 상담이 필요합니다.",
+              advice: "일상생활에 지장을 줄 수 있는 위험도 상태입니다.");
+        }
+        break;
+    }
+
+    // switch에서 해당하는 case가 없거나 오류가 발생한 경우
+    return TestResult(
+        score: totalScore,
+        title: "결과 처리 오류",
+        description: "점수 범위를 확인하거나 관리자에게 문의하세요.",
+        advice: "다시 테스트해주세요.");
+  }
+
+  // 4. 다이얼로그 내부에 표시될 주의사항 카드
+  Widget _buildDialogNoticeCard() {
+    return Container(
+      width: double.infinity,
+      padding: const EdgeInsets.all(12.0),
+      decoration: BoxDecoration(
+        color: kWarningCardBg.withOpacity(0.7), // 기존 주의사항 카드 배경
+        borderRadius: BorderRadius.circular(8.0),
+      ),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Icon(
+            Icons.info_outline,
+            color: kColorTextSubtitle,
+            size: 18,
+          ),
+          const SizedBox(width: 8.0),
+          Expanded(
+            child: Text(
+              '본 검사는 의학적 진단이 아니며, 참고용으로만 사용해 주세요. 정확한 진단은 전문의와 상담하세요.',
+              style: GoogleFonts.roboto(
+                fontSize: 12,
+                color: kColorTextSubtitle,
+                height: 1.5,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 5. _handleSubmit 함수
+  @override
   void _handleSubmit() {
     if (_answers.any((answer) => answer == null)) {
       ScaffoldMessenger.of(context).showSnackBar(
@@ -390,35 +571,75 @@ class _SurveyScreenState extends State<SurveyScreen> {
 
     int totalScore = _answers.fold(0, (sum, score) => sum + (score ?? 0));
 
-    // --- (JSON 저장 로직 - 추후 작성 예정) ---
-    // Map<String, dynamic> resultMap = {
-    //   'testType': widget.title, // 또는 categoryKey
-    //   'totalScore': totalScore,
-    //   'timestamp': DateTime.now().toIso8601String(),
-    //   'responses': []
-    // };
-    // for (int i = 0; i < widget.questions.length; i++) {
-    //   resultMap['responses'].add({
-    //     'questionText': widget.questions[i],
-    //     'answer': _answers[i],
-    //   });
-    // }
-    // String jsonResult = jsonEncode(resultMap);
-    // print('--- 검사 결과 (JSON) ---');
+    // 점수 평가 로직 호출
+    TestResult result = _evaluateTest(widget.title, totalScore);
+
+    // --- (추후 JSON 저장 로직 추가) ---
+    // Map<String, dynamic> resultMap = { ... };
+    // ...
     // print(jsonResult);
     // ----------------------------------------
 
+    // 수정된 다이얼로그 표시
     showDialog(
       context: context,
+      barrierDismissible: false, // 바깥 영역 터치로 닫기 방지
       builder: (context) => AlertDialog(
-        title: Text('검사 완료'),
-        content: Text(
-            '총점: $totalScore 점입니다.\n\n(주의: 본 검사는 의학적 진단이 아니며, 참고용으로만 사용해 주세요.)'),
+        title: Text(widget.title),
+        content: SingleChildScrollView( // 내용이 길어질 수 있으므로 스크롤
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              // 결과 타이틀
+              Text(
+                result.title,
+                style: GoogleFonts.roboto(
+                  fontSize: 20,
+                  fontWeight: FontWeight.bold,
+                  color: kColorTextTitle, // 파일 상단에 정의된 색상
+                ),
+              ),
+              const SizedBox(height: 8),
+              // 총점
+              Text(
+                '총점: ${result.score}점',
+                style: GoogleFonts.roboto(
+                  fontSize: 14,
+                  color: kColorTextSubtitle, // 파일 상단에 정의된 색상
+                ),
+              ),
+              const Divider(height: 24),
+              // 결과 설명
+              Text(
+                result.description,
+                style: GoogleFonts.roboto(
+                  fontSize: 14,
+                  color: kColorTextLabel, // 파일 상단에 정의된 색상
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 12),
+              // 조언
+              Text(
+                result.advice,
+                style: GoogleFonts.roboto(
+                  fontSize: 14,
+                  color: kColorTextLabel, // 파일 상단에 정의된 색상
+                  height: 1.5,
+                ),
+              ),
+              const SizedBox(height: 20),
+              // 하단 주의사항
+              _buildDialogNoticeCard(), // 위에서 만든 함수 호출
+            ],
+          ),
+        ),
         actions: [
           TextButton(
             onPressed: () {
-              Navigator.pop(context);
-              Navigator.pop(context);
+              Navigator.pop(context); // 다이얼로그 닫기
+              Navigator.pop(context); // 검사 페이지 닫기 (메인으로 이동)
             },
             child: Text('확인'),
           ),
@@ -477,7 +698,7 @@ class _SurveyScreenState extends State<SurveyScreen> {
                   borderRadius: BorderRadius.circular(12),
                 ),
               ),
-              onPressed: _handleSubmit,
+              onPressed: _handleSubmit, // [!!] 수정된 handleSubmit 함수가 호출됨
               child: Text(
                 '결과 보기',
                 style: GoogleFonts.roboto(
@@ -490,7 +711,6 @@ class _SurveyScreenState extends State<SurveyScreen> {
     );
   }
 }
-
 
 // -------------------------------------------------------------------
 // 8. 개별 질문 항목 위젯 (StatelessWidget)
