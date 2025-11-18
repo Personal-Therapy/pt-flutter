@@ -1,11 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-
+import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'healing_screen.dart';
 // 1. 우리가 만든 로그인 화면 파일을 import 합니다.
 // (파일 경로가 'lib/login_screen.dart'라고 가정)
 import 'login_screen.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await dotenv.load(fileName: ".env"); // .env 파일 읽기
+
   runApp(const MyApp());
 }
 

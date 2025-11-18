@@ -42,3 +42,7 @@ android {
 flutter {
     source = "../.."
 }
+
+dependencies {
+    implementation("androidx.health.connect:connect-client:1.2.0-alpha02")
+}

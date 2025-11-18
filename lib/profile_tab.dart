@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 
 import 'add_contact_sheet.dart'; // [!!] 팝업창 위젯 import
 import 'personal_info_screen.dart'; // [!!] 1. 새로 만든 페이지 import
+import 'HealthResultPage.dart';
 
 // RTF 파일에서 정의된 색상 상수
 const Color kPageBackground = Color(0xFFF9FAFB);
@@ -15,13 +16,11 @@ const Color kDisabledGrey = Color(0xFFE5E7EB);
 const Color kTextPrimary = Color(0xFF111827);
 const Color kTextSecondary = Color(0xFF6B7280);
 
-
 // [!!] 연락처 데이터를 관리할 클래스(모델)를 정의합니다.
 class EmergencyContact {
   String name;
   String phone;
   String tag;
-  // (아이콘/색상 정보도 여기에 추가할 수 있습니다)
   final IconData icon;
   final Color bgColor;
   final Color iconColor;
@@ -36,8 +35,7 @@ class EmergencyContact {
   });
 }
 
-
-// [!!] StatefulWidget (기존과 동일)
+// 프로필 탭
 class ProfileTab extends StatefulWidget {
   const ProfileTab({Key? key}) : super(key: key);
 
@@ -45,10 +43,7 @@ class ProfileTab extends StatefulWidget {
   _ProfileTabState createState() => _ProfileTabState();
 }
 
-// [!!] State 클래스 (기존과 동일)
 class _ProfileTabState extends State<ProfileTab> {
-
-  // [!!] 연락처 목록 상태 (기존과 동일)
   final List<EmergencyContact> _contacts = [
     EmergencyContact(
       name: '김엄마',
@@ -76,7 +71,6 @@ class _ProfileTabState extends State<ProfileTab> {
     ),
   ];
 
-  // [!!] build 메서드 (기존과 동일)
   @override
   Widget build(BuildContext context) {
     return SingleChildScrollView(
@@ -84,20 +78,22 @@ class _ProfileTabState extends State<ProfileTab> {
       child: Column(
         children: [
           _buildUserStatsCard(),
-          SizedBox(height: 24),
-          _buildEmergencyContactsCard(context), // context 전달
-          SizedBox(height: 24),
+          const SizedBox(height: 24),
+          _buildHealthStatusCard(context), // ✅ "나의 상태" 카드 추가
+          const SizedBox(height: 24),
+          _buildEmergencyContactsCard(context),
+          const SizedBox(height: 24),
           _NotificationSettingsCard(),
-          SizedBox(height: 24),
-          _buildAccountCard(), // [!!] 2. 이 위젯이 수정되었습니다.
-          SizedBox(height: 24),
+          const SizedBox(height: 24),
+          _buildAccountCard(),
+          const SizedBox(height: 24),
           _buildDeleteAccountCard(),
         ],
       ),
     );
   }
 
-  // --- 1. 사용자 스탯 카드 (기존과 동일) ---
+  // 사용자 스탯 카드
   Widget _buildUserStatsCard() {
     return _buildCardContainer(
       child: Column(
@@ -105,18 +101,17 @@ class _ProfileTabState extends State<ProfileTab> {
         children: [
           Row(
             children: [
-              // 'DIV-12' (아이콘)
               CircleAvatar(
-                radius: 32, // (64px / 2)
+                radius: 32,
                 backgroundColor: Color(0xFFDBEAFE),
                 child: Icon(Icons.person, size: 30, color: kPrimaryBlue),
               ),
-              SizedBox(width: 16),
+              const SizedBox(width: 16),
               Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
+                children: const [
                   Text(
-                    '사용자님', // 'H2-10'
+                    '사용자님',
                     style: TextStyle(
                       fontSize: 18,
                       fontWeight: FontWeight.w600,
@@ -125,7 +120,7 @@ class _ProfileTabState extends State<ProfileTab> {
                   ),
                   SizedBox(height: 4),
                   Text(
-                    'Personal Therapy와 함께한 지 30일', // 'P-13'
+                    'Personal Therapy와 함께한 지 30일',
                     style: TextStyle(fontSize: 14, color: kTextSecondary),
                   ),
                 ],
@@ -133,13 +128,65 @@ class _ProfileTabState extends State<ProfileTab> {
             ],
           ),
           Divider(height: 32, color: Colors.grey[200]),
-          // 'DIV-16' (통계 영역)
           Row(
             mainAxisAlignment: MainAxisAlignment.spaceAround,
             children: [
               _buildStatItem('대화 횟수', '127', kPrimaryBlue),
               _buildStatItem('평균 건강점수', '85', kPrimaryGreen),
               _buildStatItem('힐링 콘텐츠', '42', kPrimaryPurple),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ✅ 나의 상태 카드
+  Widget _buildHealthStatusCard(BuildContext context) {
+    return _buildCardContainer(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                '나의 상태',
+                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+              ),
+              ElevatedButton(
+                onPressed: () {
+                  Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (_) => const HealthResultPage()),
+                  );
+                },
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: kPrimaryBlue,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text('확인하기'),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: const [
+              StatusItem(icon: Icons.favorite, title: '건강 점수', value: '82'),
+              StatusItem(icon: Icons.hotel, title: '수면 시간', value: '7h 10m'),
+              StatusItem(
+                icon: Icons.directions_walk,
+                title: '걸음 수',
+                value: '6,200',
+              ),
             ],
           ),
         ],
@@ -175,7 +222,7 @@ class _ProfileTabState extends State<ProfileTab> {
                     size: 20,
                   ),
                 ),
-              )
+              ),
             ],
           ),
           SizedBox(height: 8),
@@ -262,17 +309,17 @@ class _ProfileTabState extends State<ProfileTab> {
               _buildSwitchItem(
                 '감정 기록 알림',
                 Toggles['감정 기록 알림']!,
-                    (value) => setState(() => Toggles['감정 기록 알림'] = value),
+                (value) => setState(() => Toggles['감정 기록 알림'] = value),
               ),
               _buildSwitchItem(
                 '위기 감지 알림',
                 Toggles['위기 감지 알림']!,
-                    (value) => setState(() => Toggles['위기 감지 알림'] = value),
+                (value) => setState(() => Toggles['위기 감지 알림'] = value),
               ),
               _buildSwitchItem(
                 '힐링 콘텐츠 알림',
                 Toggles['힐링 콘텐츠 알림']!,
-                    (value) => setState(() => Toggles['힐링 콘텐츠 알림'] = value),
+                (value) => setState(() => Toggles['힐링 콘텐츠 알림'] = value),
               ),
             ],
           ),
@@ -339,7 +386,9 @@ class _ProfileTabState extends State<ProfileTab> {
               backgroundColor: kPrimaryRed, // primary -> backgroundColor
               foregroundColor: Colors.white, // onPrimary -> foregroundColor
               minimumSize: Size(double.infinity, 48),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
             ),
             onPressed: () {},
             child: Text('생명의전화 1393'),
@@ -350,7 +399,9 @@ class _ProfileTabState extends State<ProfileTab> {
               backgroundColor: Color(0xFFF3F4F6), // primary -> backgroundColor
               foregroundColor: kTextSecondary, // onPrimary -> foregroundColor
               minimumSize: Size(double.infinity, 48),
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+              shape: RoundedRectangleBorder(
+                borderRadius: BorderRadius.circular(8),
+              ),
               elevation: 0,
             ),
             onPressed: () {},
@@ -380,10 +431,7 @@ class _ProfileTabState extends State<ProfileTab> {
   Widget _buildStatItem(String title, String value, Color color) {
     return Column(
       children: [
-        Text(
-          title,
-          style: TextStyle(fontSize: 12, color: kTextSecondary),
-        ),
+        Text(title, style: TextStyle(fontSize: 12, color: kTextSecondary)),
         SizedBox(height: 4),
         Text(
           value,
@@ -416,8 +464,10 @@ class _ProfileTabState extends State<ProfileTab> {
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               Text(contact.name, style: TextStyle(fontWeight: FontWeight.w600)),
-              Text('${contact.phone} ${contact.tag}',
-                  style: TextStyle(color: kTextSecondary)),
+              Text(
+                '${contact.phone} ${contact.tag}',
+                style: TextStyle(color: kTextSecondary),
+              ),
             ],
           ),
           Spacer(),
@@ -431,11 +481,7 @@ class _ProfileTabState extends State<ProfileTab> {
   }
 
   // 스위치 아이템 (기존과 동일)
-  Widget _buildSwitchItem(
-      String title,
-      bool value,
-      Function(bool) onChanged,
-      ) {
+  Widget _buildSwitchItem(String title, bool value, Function(bool) onChanged) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
@@ -470,9 +516,7 @@ class _ProfileTabState extends State<ProfileTab> {
           children: [
             Icon(icon, color: iconColor, size: 20),
             SizedBox(width: 12),
-            Expanded(
-              child: Text(text, style: TextStyle(fontSize: 16)),
-            ),
+            Expanded(child: Text(text, style: TextStyle(fontSize: 16))),
             Icon(Icons.arrow_forward_ios, size: 16, color: kTextSecondary),
           ],
         ),
@@ -480,3 +524,31 @@ class _ProfileTabState extends State<ProfileTab> {
     );
   }
 } // [!!] _ProfileTabState 끝
+
+class StatusItem extends StatelessWidget {
+  final IconData icon;
+  final String title;
+  final String value;
+
+  const StatusItem({
+    Key? key,
+    required this.icon,
+    required this.title,
+    required this.value,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    return Column(
+      children: [
+        Icon(icon, color: kPrimaryBlue),
+        const SizedBox(height: 6),
+        Text(value, style: const TextStyle(fontWeight: FontWeight.bold)),
+        Text(
+          title,
+          style: const TextStyle(fontSize: 12, color: kTextSecondary),
+        ),
+      ],
+    );
+  }
+}
