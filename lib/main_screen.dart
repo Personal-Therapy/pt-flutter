@@ -8,6 +8,8 @@ import 'emotion_tracking_tab.dart';
 import 'healing_screen.dart';
 import 'diagnosis_screen.dart';
 
+//ai채팅 탭
+import 'aichat_screen.dart';
 // --- Color Definitions ---
 const Color kColorBgStart = Color(0xFFEFF6FF);
 const Color kColorBgEnd = Color(0xFFFAF5FF);
@@ -95,8 +97,8 @@ class _MainScreenState extends State<MainScreen> {
   static final List<Widget> _pages = <Widget>[
     // 0: 홈 탭 (디자인 보존을 위해 별도 위젯으로 분리)
     const _HomeScreenContent(),
-    // 1: 상담 탭 (임시)
-    const PlaceholderTab(title: '상담'),
+    // 1: 상담 탭
+    const AIChatScreen(),
     // 2: 추적 탭 (파일 1에서 만든 위젯)
     // '추적' 탭은 자체 디자인에 맞는 AppBar가 필요합니다.
     Scaffold(
