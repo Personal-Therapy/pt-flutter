@@ -28,11 +28,37 @@ class FirestoreService {
   }
 
   // Update user mood score
-  Future<void> updateMoodScore(String uid, int moodScore) async {
-    await _db.collection('users').doc(uid).collection('mood_scores').add({
-      'score': moodScore,
-      'timestamp': FieldValue.serverTimestamp(),
-    });
+  Future<void> updateMoodScore(
+      String userId,
+      int score, {
+        Map<String, String>? detailedAnswers,
+        double? detailScore,  // 상세 질문의 평균 점수 추가
+      }) async {
+    try {
+      final data = {
+        'score': score,
+        'timestamp': FieldValue.serverTimestamp(),
+      };
+
+      // 상세 답변이 있으면 포함
+      if (detailedAnswers != null && detailedAnswers.isNotEmpty) {
+        data['detailedAnswers'] = detailedAnswers;
+      }
+
+      // 상세 질문 점수가 있으면 포함
+      if (detailScore != null) {
+        data['detailScore'] = detailScore;
+      }
+
+      await _db
+          .collection('users')
+          .doc(userId)
+          .collection('moodScores')
+          .add(data);
+    } catch (e) {
+      print('Error updating mood score: $e');
+      rethrow;
+    }
   }
 
   // Get user mood scores
