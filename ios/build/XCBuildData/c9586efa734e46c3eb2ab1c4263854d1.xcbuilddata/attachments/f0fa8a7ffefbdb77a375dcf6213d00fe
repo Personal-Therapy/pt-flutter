@@ -1,0 +1,16 @@
+{
+  "" : {
+    "const-values" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/OrderedSet.build/Objects-normal/arm64/OrderedSet-primary.swiftconstvalues",
+    "dependencies" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/OrderedSet.build/Objects-normal/arm64/OrderedSet-primary.d",
+    "diagnostics" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/OrderedSet.build/Objects-normal/arm64/OrderedSet-primary.dia",
+    "emit-module-dependencies" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/OrderedSet.build/Objects-normal/arm64/OrderedSet-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/OrderedSet.build/Objects-normal/arm64/OrderedSet-primary-emit-module.dia",
+    "pch" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/OrderedSet.build/Objects-normal/arm64/OrderedSet-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/OrderedSet.build/Objects-normal/arm64/OrderedSet-primary.swiftdeps"
+  },
+  "/Users/mvrock/personal_therapy/ios/Pods/OrderedSet/Sources/OrderedSet.swift" : {
+    "index-unit-output-path" : "/Pods.build/Release-iphoneos/OrderedSet.build/Objects-normal/arm64/OrderedSet.o",
+    "llvm-bc" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/OrderedSet.build/Objects-normal/arm64/OrderedSet.bc",
+    "object" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/OrderedSet.build/Objects-normal/arm64/OrderedSet.o"
+  }
+}

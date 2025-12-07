@@ -1,10 +1,10 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
-import 'package:untitled/signup_screen.dart'; // Make sure this path is correct
-import 'package:firebase_auth/firebase_auth.dart'; // Add this import
+import 'package:untitled/signup_screen.dart';
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 
 import 'forgot_password_screen.dart';
-// import 'main_screen.dart'; // 👈 [삭제] 메인 스크린 import는 AuthWrapper에서 관리
 
 // --- Color Definitions ---
 const Color kColorBgStart = Color(0xFFEFF6FF);
@@ -126,6 +126,57 @@ class LoginScreenState extends State<LoginScreen> {
   }
   // --- ▲ [추가] 로그인 로직 함수 ▲ ---
 
+  // --- ▼ [추가] 구글 로그인 함수 ▼ ---
+  Future<void> _signInWithGoogle() async {
+    setState(() {
+      _isLoading = true;
+      _errorMessage = null;
+    });
+
+    try {
+      // 1. Google Sign In 시작 (웹 클라이언트 ID 명시)
+      final GoogleSignInAccount? googleUser = await GoogleSignIn(
+        scopes: ['email'],
+        serverClientId: '830768959120-0hlmi87bb8bmhd1blut0jr0tqp16k7gq.apps.googleusercontent.com',
+      ).signIn();
+
+      if (googleUser == null) {
+        // 사용자가 로그인을 취소함
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // 2. Google 인증 정보 가져오기
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+
+      // 3. Firebase 인증 자격증명 생성
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      // 4. Firebase로 로그인
+      await FirebaseAuth.instance.signInWithCredential(credential);
+
+      print("Google 로그인 성공");
+
+    } catch (e) {
+      print("Google 로그인 오류: $e");
+      setState(() {
+        _errorMessage = 'Google 로그인에 실패했습니다. 다시 시도해주세요.';
+        _isLoading = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = false;
+    });
+  }
+  // --- ▲ [추가] 구글 로그인 함수 ▲ ---
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -211,7 +262,7 @@ class LoginScreenState extends State<LoginScreen> {
                       ),
                     ),
                     TextButton(
-                      onPressed: _isLoading ? null : () { // 👈 로딩 중 비활성화
+                      onPressed: _isLoading ? null : () {
                         Navigator.push(
                           context,
                           MaterialPageRoute(builder: (context) => const SignUpScreen()),
@@ -328,7 +379,7 @@ class LoginScreenState extends State<LoginScreen> {
                   ),
                 ),
                 TextButton(
-                  onPressed: _isLoading ? null : () { // 👈 로딩 중 비활성화
+                  onPressed: _isLoading ? null : () {
                     Navigator.push(
                       context,
                       MaterialPageRoute(builder: (context) => const ForgotPasswordScreen()),
@@ -418,9 +469,7 @@ class LoginScreenState extends State<LoginScreen> {
 
   Widget _buildGoogleLoginButton() {
     return OutlinedButton.icon(
-      onPressed: _isLoading ? null : () { // 👈 로딩 중 비활성화
-        // TODO: Google login logic
-      },
+      onPressed: _isLoading ? null : _signInWithGoogle, // 👈 구글 로그인 함수 연결
       icon: Image.asset(
         'assets/images/google_logo.png', // This asset needs to be added to pubspec.yaml
         height: 24.0,

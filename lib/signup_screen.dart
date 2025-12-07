@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:untitled/services/firestore_service.dart';
+import 'package:google_sign_in/google_sign_in.dart';
 import 'package:untitled/services/firestore_service.dart';
 
 // --- 색상 정의 (에러 색상 kColorError 추가) ---
@@ -150,6 +150,70 @@ class SignUpScreenState extends State<SignUpScreen> {
 
     setState(() {
       _isLoading = false; // Stop loading
+    });
+  }
+
+  // --- 구글 로그인 함수 ---
+  Future<void> _signInWithGoogle() async {
+    setState(() {
+      _isLoading = true;
+    });
+
+    try {
+      // 1. Google Sign In 시작 (웹 클라이언트 ID 명시)
+      final GoogleSignInAccount? googleUser = await GoogleSignIn(
+        scopes: ['email'],
+        serverClientId: '830768959120-0hlmi87bb8bmhd1blut0jr0tqp16k7gq.apps.googleusercontent.com',
+      ).signIn();
+
+      if (googleUser == null) {
+        // 사용자가 로그인을 취소함
+        setState(() {
+          _isLoading = false;
+        });
+        return;
+      }
+
+      // 2. Google 인증 정보 가져오기
+      final GoogleSignInAuthentication googleAuth = await googleUser.authentication;
+
+      // 3. Firebase 인증 자격증명 생성
+      final credential = GoogleAuthProvider.credential(
+        accessToken: googleAuth.accessToken,
+        idToken: googleAuth.idToken,
+      );
+
+      // 4. Firebase로 로그인
+      UserCredential userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
+
+      // 5. Firestore에 사용자 정보 저장 (처음 가입하는 경우)
+      if (userCredential.user != null) {
+        final user = userCredential.user!;
+        await FirestoreService().addUser(
+          user.uid,
+          user.displayName ?? 'Google 사용자',
+          user.email ?? '',
+        );
+      }
+
+      print("Google 로그인 성공");
+
+      // 로그인 성공 시 이전 화면으로 돌아가기
+      if (mounted) {
+        Navigator.pop(context);
+      }
+
+    } catch (e) {
+      print("Google 로그인 오류: $e");
+      setState(() {
+        _emailError = 'Google 로그인에 실패했습니다. 다시 시도해주세요.';
+        _isLoading = false;
+      });
+      return;
+    }
+
+    setState(() {
+      _isLoading = false;
     });
   }
 
@@ -454,9 +518,8 @@ class SignUpScreenState extends State<SignUpScreen> {
             // Google 로그인 버튼 위젯 (로그인과 동일)
     Widget _buildGoogleLoginButton() {
       return OutlinedButton.icon(
-        onPressed: _isLoading ? null : () { // 👈 로딩 중 비활성화
-          // TODO: 파이어베이스 구글 로그인 기능 구현
-        },      icon: Image.asset(
+        onPressed: _isLoading ? null : _signInWithGoogle,
+        icon: Image.asset(
         'assets/images/google_logo.png',
         height: 24.0,
       ),

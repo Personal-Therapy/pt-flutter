@@ -56,33 +56,6 @@ class ProfileTabState extends State<ProfileTab> {
   int _stepCount = 0;
   final TextEditingController _sleepTimeController = TextEditingController();
 
-  final List<EmergencyContact> _contacts = [
-    EmergencyContact(
-      name: '김엄마',
-      phone: '010-1234-5678',
-      tag: '가족',
-      icon: Icons.family_restroom,
-      bgColor: Color(0xFFFEE2E2),
-      iconColor: Color(0xFFDC2626),
-    ),
-    EmergencyContact(
-      name: '이친구',
-      phone: '010-9876-5432',
-      tag: '친구',
-      icon: Icons.people,
-      bgColor: Color(0xFFD1FAE5),
-      iconColor: Color(0xFF16A34A),
-    ),
-    EmergencyContact(
-      name: '박상담',
-      phone: '010-1111-2222',
-      tag: '상담사',
-      icon: Icons.support_agent,
-      bgColor: Color(0xFFFEF3C7),
-      iconColor: Color(0xFFD97706),
-    ),
-  ];
-
   @override
   void initState() {
     super.initState();
@@ -209,32 +182,51 @@ class ProfileTabState extends State<ProfileTab> {
                 '나의 상태',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
               ),
-              ElevatedButton(
-                onPressed: () {
-                  // 현재 사용자 데이터 가져오기
-                  _firestoreService.getUserStream(_currentUserId!).first.then((userData) {
-                    if (userData != null) {
-                      Navigator.push(
-                        context,
-                        MaterialPageRoute(
-                          builder: (_) => HealthResultPage(userData: userData),
-                        ),
-                      );
-                    }
-                  });
-                },
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: kColorBtnPrimary,
-                  foregroundColor: Colors.white,
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
+              Row(
+                children: [
+                  // 개발용: 수면 기록 삭제 버튼
+                  TextButton(
+                    onPressed: () async {
+                      if (_currentUserId != null) {
+                        await _firestoreService.deleteAllSleepRecords(_currentUserId!);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('수면 기록이 모두 삭제되었습니다')),
+                          );
+                        }
+                      }
+                    },
+                    child: const Text('수면 삭제', style: TextStyle(fontSize: 12)),
                   ),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
+                  const SizedBox(width: 8),
+                  ElevatedButton(
+                    onPressed: () {
+                      // 현재 사용자 데이터 가져오기
+                      _firestoreService.getUserStream(_currentUserId!).first.then((userData) {
+                        if (userData != null) {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (_) => HealthResultPage(userData: userData),
+                            ),
+                          );
+                        }
+                      });
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: kColorBtnPrimary,
+                      foregroundColor: Colors.white,
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 8,
+                      ),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: const Text('확인하기'),
                   ),
-                ),
-                child: const Text('확인하기'),
+                ],
               ),
             ],
           ),
@@ -253,20 +245,69 @@ class ProfileTabState extends State<ProfileTab> {
               }
               final userData = snapshot.data!;
               final healthScore = (userData['averageHealthScore'] ?? 'N/A').toString();
-              final sleepTime = userData['sleepTime'] as String? ?? 'N/A';
+              // final sleepTime = userData['sleepTime'] as String? ?? 'N/A'; // 기존 코드 주석 처리 또는 제거
 
               return Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  StatusItem(icon: Icons.favorite, title: '건강 점수', value: healthScore),
-                  GestureDetector(
-                    onTap: () => _showSleepTimeInputDialog(context),
-                    child: StatusItem(icon: Icons.hotel, title: '수면 시간', value: sleepTime),
+                  Expanded(child: StatusItem(icon: Icons.favorite, title: '건강 점수', value: healthScore)),
+                  Expanded(
+                    child: GestureDetector(
+                      onTap: () => _showSleepTimeInputDialog(context),
+                      child: StreamBuilder<List<Map<String, dynamic>>>(
+                        stream: _currentUserId != null ? _firestoreService.getSleepScoresStream(_currentUserId!) : null,
+                        builder: (context, sleepSnapshot) {
+                          print('StreamBuilder - ConnectionState: ${sleepSnapshot.connectionState}');
+                          print('StreamBuilder - HasError: ${sleepSnapshot.hasError}');
+                          if (sleepSnapshot.hasData) {
+                            print('StreamBuilder - Sleep Data: ${sleepSnapshot.data}');
+                          }
+                          
+                          if (sleepSnapshot.connectionState == ConnectionState.waiting) {
+                            return const StatusItem(icon: Icons.hotel, title: '수면 시간', value: '...');
+                          }
+                          if (sleepSnapshot.hasError) {
+                            return const StatusItem(icon: Icons.hotel, title: '수면 시간', value: '오류');
+                          }
+                          
+                          List<Map<String, dynamic>> sleepData = sleepSnapshot.data ?? [];
+                          double totalDuration = 0.0;
+                          int count = 0;
+
+                          // 최근 7일간의 평균 수면 시간 계산 로직 (emotion_tracking_tab.dart 재활용)
+                          final now = DateTime.now();
+                          final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+                          final endOfWeek = startOfWeek.add(const Duration(days: 6));
+
+                          final filteredData = sleepData.where((record) {
+                            final timestamp = record['timestamp'] as Timestamp?;
+                            return timestamp != null &&
+                                timestamp.toDate().isAfter(startOfWeek.subtract(const Duration(days: 1))) &&
+                                timestamp.toDate().isBefore(endOfWeek.add(const Duration(days: 1)));
+                          }).toList();
+
+                          for (var record in filteredData) {
+                            try {
+                              totalDuration += (record['duration'] as num).toDouble();
+                              count++;
+                            } catch (e) {
+                              // 오류 처리
+                            }
+                          }
+
+                          String averageSleep = count > 0 ? (totalDuration / count).toStringAsFixed(1) : 'N/A';
+
+                          return StatusItem(icon: Icons.hotel, title: '수면 시간', value: '$averageSleep 시간');
+                        },
+                      ),
+                    ),
                   ),
-                  StatusItem(
-                    icon: Icons.directions_walk,
-                    title: '걸음 수',
-                    value: _stepCount.toString(),
+                  Expanded(
+                    child: StatusItem(
+                      icon: Icons.directions_walk,
+                      title: '걸음 수',
+                      value: _stepCount.toString(),
+                    ),
                   ),
                 ],
               );
@@ -315,12 +356,27 @@ class ProfileTabState extends State<ProfileTab> {
             ),
             TextButton(
               child: const Text('저장'),
-              onPressed: () {
+              onPressed: () async {
                 if (_currentUserId != null) {
-                  _firestoreService.addSleepRecord(
-                      _currentUserId!, _currentSliderValue);
+                  print('현재 사용자 UID: $_currentUserId'); // 디버그 로그 추가
+                  print('수면 시간 저장 시도: $_currentSliderValue 시간'); // 저장 시도 로그
+                  try {
+                    await _firestoreService.addSleepRecord(
+                        _currentUserId!, _currentSliderValue);
+                    print('수면 시간 저장 성공: $_currentSliderValue 시간'); // 저장 성공 로그
+                    Navigator.of(context).pop(); // 성공 시에만 팝업 닫기
+                  } catch (e) {
+                    print('수면 시간 저장 실패: $e'); // 저장 실패 로그
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(content: Text('수면 시간 저장에 실패했습니다: ${e.toString()}')),
+                    );
+                  }
+                } else {
+                  print('오류: _currentUserId가 null입니다.'); // 디버그 로그 추가
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('로그인 정보가 없어 수면 시간을 저장할 수 없습니다. 다시 로그인해주세요.')),
+                  );
                 }
-                Navigator.of(context).pop();
               },
             ),
           ],
@@ -330,93 +386,182 @@ class ProfileTabState extends State<ProfileTab> {
   }
 
 
-  // --- 2. 안심 연락망 카드 (기존과 동일) ---
+  // --- 2. 안심 연락망 카드 ---
   Widget _buildEmergencyContactsCard(BuildContext context) {
-    return _buildCardContainer(
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                '안심 연락망', // 'H3-40'
-                style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
-              ),
-              // 'BUTTON-43' (추가 버튼)
-              InkWell(
-                onTap: () {
-                  // '추가' 모드로 팝업 호출 (contact: null)
-                  _showAddContactModal(context);
-                },
-                child: CircleAvatar(
-                  radius: 16, // 32px
-                  backgroundColor: Color(0xFFDBEAFE), // background: #DBEAFE
-                  child: Icon(
-                    Icons.add,
-                    color: kColorBtnPrimary, // icon color: #2563EB
-                    size: 20,
-                  ),
-                ),
-              ),
-            ],
-          ),
-          SizedBox(height: 8),
-          Text(
-            '위기 상황 감지 시 알림을 받을 연락처를 설정하세요. (최대 3개)', // 'P-46'
-            style: TextStyle(fontSize: 14, color: kColorTextSubtitle),
-          ),
-          SizedBox(height: 20),
+    if (_currentUserId == null) {
+      return _buildCardContainer(
+        child: const Center(child: Text('로그인이 필요합니다.')),
+      );
+    }
 
-          // 동적으로 연락처 목록 생성
-          Column(
-            children: _contacts.map((contact) {
-              return _buildContactItem(
-                contact: contact, // 연락처 객체 전달
-                onEdit: () {
-                  // '수정' 모드로 팝업 호출 (contact 객체 전달)
-                  _showAddContactModal(context, contact: contact);
-                },
-              );
-            }).toList(),
-          ),
-        ],
+    return _buildCardContainer(
+      child: StreamBuilder<List<Map<String, dynamic>>>(
+        stream: _firestoreService.getEmergencyContactsStream(_currentUserId!),
+        builder: (context, snapshot) {
+          if (snapshot.connectionState == ConnectionState.waiting) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError) {
+            return Center(child: Text('오류: ${snapshot.error}'));
+          }
+
+          final contacts = snapshot.data ?? [];
+
+          return Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    '안심 연락망',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
+                  ),
+                  InkWell(
+                    onTap: contacts.length >= 3
+                        ? null
+                        : () {
+                            _showAddContactModal(context, contacts: contacts);
+                          },
+                    child: CircleAvatar(
+                      radius: 16,
+                      backgroundColor: contacts.length >= 3
+                          ? Color(0xFFE5E7EB)
+                          : Color(0xFFDBEAFE),
+                      child: Icon(
+                        Icons.add,
+                        color: contacts.length >= 3
+                            ? Color(0xFF9CA3AF)
+                            : kColorBtnPrimary,
+                        size: 20,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+              SizedBox(height: 8),
+              Text(
+                '위기 상황 감지 시 알림을 받을 연락처를 설정하세요. (${contacts.length}/3)',
+                style: TextStyle(fontSize: 14, color: kColorTextSubtitle),
+              ),
+              SizedBox(height: 20),
+
+              // 연락처 목록
+              if (contacts.isEmpty)
+                Center(
+                  child: Text(
+                    '등록된 연락처가 없습니다.',
+                    style: TextStyle(color: kColorTextSubtitle),
+                  ),
+                )
+              else
+                Column(
+                  children: contacts.asMap().entries.map((entry) {
+                    final index = entry.key;
+                    final contact = entry.value;
+                    return _buildContactItem(
+                      name: contact['name'] ?? '',
+                      phone: contact['phone'] ?? '',
+                      tag: contact['tag'] ?? '',
+                      onEdit: () {
+                        _showAddContactModal(
+                          context,
+                          contacts: contacts,
+                          editIndex: index,
+                          existingContact: contact,
+                        );
+                      },
+                      onDelete: () async {
+                        await _firestoreService.deleteEmergencyContact(_currentUserId!, index);
+                        if (context.mounted) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('연락처가 삭제되었습니다')),
+                          );
+                        }
+                      },
+                    );
+                  }).toList(),
+                ),
+            ],
+          );
+        },
       ),
     );
   }
 
-  // [!!] 팝업 띄우기 함수 (기존과 동일)
-  void _showAddContactModal(BuildContext context, {EmergencyContact? contact}) {
+  // 팝업 띄우기 함수
+  void _showAddContactModal(
+    BuildContext context, {
+    required List<Map<String, dynamic>> contacts,
+    int? editIndex,
+    Map<String, dynamic>? existingContact,
+  }) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
       isScrollControlled: true,
       builder: (BuildContext bContext) {
         return AddContactBottomSheet(
-          contact: contact,
-          onSave: (String name, String phone, String tag) {
-            // 저장 콜백 로직
-            setState(() {
-              if (contact == null) {
-                // '추가' 모드
-                _contacts.add(
-                  EmergencyContact(
-                    name: name,
-                    phone: phone,
-                    tag: tag,
-                    icon: Icons.person,
-                    bgColor: Color(0xFFE0E7FF),
-                    iconColor: Color(0xFF4338CA),
-                  ),
+          contact: existingContact != null
+              ? EmergencyContact(
+                  name: existingContact['name'] ?? '',
+                  phone: existingContact['phone'] ?? '',
+                  tag: existingContact['tag'] ?? '',
+                  icon: Icons.person,
+                  bgColor: Color(0xFFE0E7FF),
+                  iconColor: Color(0xFF4338CA),
+                )
+              : null,
+          onSave: (String name, String phone, String tag) async {
+            if (_currentUserId == null) return;
+
+            final contactData = {
+              'name': name,
+              'phone': phone,
+              'tag': tag,
+            };
+
+            try {
+              if (editIndex != null) {
+                // 수정 모드
+                await _firestoreService.updateEmergencyContact(
+                  _currentUserId!,
+                  editIndex,
+                  contactData,
                 );
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('연락처가 수정되었습니다')),
+                  );
+                }
               } else {
-                // '수정' 모드
-                contact.name = name;
-                contact.phone = phone;
-                contact.tag = tag;
+                // 추가 모드
+                if (contacts.length >= 3) {
+                  if (context.mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(content: Text('최대 3개까지만 등록할 수 있습니다')),
+                    );
+                  }
+                  return;
+                }
+                await _firestoreService.addEmergencyContact(
+                  _currentUserId!,
+                  contactData,
+                );
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    const SnackBar(content: Text('연락처가 추가되었습니다')),
+                  );
+                }
               }
-            });
-            Navigator.pop(context); // 팝업 닫기
+              Navigator.pop(context);
+            } catch (e) {
+              if (context.mounted) {
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text('오류가 발생했습니다: $e')),
+                );
+              }
+            }
           },
         );
       },
@@ -590,35 +735,70 @@ class ProfileTabState extends State<ProfileTab> {
     );
   }
 
-  // 연락처 아이템 헬퍼 (기존과 동일)
+  // 연락처 아이템 헬퍼
   Widget _buildContactItem({
-    required EmergencyContact contact,
+    required String name,
+    required String phone,
+    required String tag,
     required VoidCallback onEdit,
+    required VoidCallback onDelete,
   }) {
+    // 태그에 따라 아이콘과 색상 결정
+    IconData icon;
+    Color bgColor;
+    Color iconColor;
+
+    switch (tag) {
+      case '가족':
+        icon = Icons.family_restroom;
+        bgColor = Color(0xFFFEE2E2);
+        iconColor = Color(0xFFDC2626);
+        break;
+      case '친구':
+        icon = Icons.people;
+        bgColor = Color(0xFFD1FAE5);
+        iconColor = Color(0xFF16A34A);
+        break;
+      case '상담사':
+        icon = Icons.support_agent;
+        bgColor = Color(0xFFFEF3C7);
+        iconColor = Color(0xFFD97706);
+        break;
+      default:
+        icon = Icons.person;
+        bgColor = Color(0xFFE0E7FF);
+        iconColor = Color(0xFF4338CA);
+    }
+
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
         children: [
           CircleAvatar(
             radius: 20,
-            backgroundColor: contact.bgColor,
-            child: Icon(contact.icon, color: contact.iconColor, size: 20),
+            backgroundColor: bgColor,
+            child: Icon(icon, color: iconColor, size: 20),
           ),
           SizedBox(width: 12),
-          Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(contact.name, style: TextStyle(fontWeight: FontWeight.w600)),
-              Text(
-                '${contact.phone} ${contact.tag}',
-                style: TextStyle(color: kColorTextSubtitle),
-              ),
-            ],
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(name, style: TextStyle(fontWeight: FontWeight.w600)),
+                Text(
+                  '$phone · $tag',
+                  style: TextStyle(color: kColorTextSubtitle),
+                ),
+              ],
+            ),
           ),
-          Spacer(),
           IconButton(
             icon: Icon(Icons.edit, color: kColorTextSubtitle, size: 20),
-            onPressed: onEdit, // 수정 콜백 실행
+            onPressed: onEdit,
+          ),
+          IconButton(
+            icon: Icon(Icons.delete, color: kColorError, size: 20),
+            onPressed: onDelete,
           ),
         ],
       ),
