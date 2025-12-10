@@ -9,7 +9,10 @@ class YoutubeService {
   static final Map<String, List<Map<String, String>>> _cache = {};
   //확장 static const Duration cacheDuration = Duration(hours: 1);
 
-  Future<List<Map<String, String>>> fetchByKeyword(String query) async {
+  Future<List<Map<String, String>>> fetchByKeyword(
+      String query,
+      {String regionCode = 'KR', String? categoryId}
+      ) async {
     if (apiKey.isEmpty) {
       if (kDebugMode) {
         print('YOUTUBE_API_KEY is not set in .env file');
