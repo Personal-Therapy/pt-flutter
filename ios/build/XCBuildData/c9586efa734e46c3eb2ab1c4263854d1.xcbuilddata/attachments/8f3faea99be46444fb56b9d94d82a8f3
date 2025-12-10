@@ -1,0 +1,21 @@
+{
+  "" : {
+    "const-values" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/path_provider_foundation.build/Objects-normal/arm64/path_provider_foundation-primary.swiftconstvalues",
+    "dependencies" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/path_provider_foundation.build/Objects-normal/arm64/path_provider_foundation-primary.d",
+    "diagnostics" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/path_provider_foundation.build/Objects-normal/arm64/path_provider_foundation-primary.dia",
+    "emit-module-dependencies" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/path_provider_foundation.build/Objects-normal/arm64/path_provider_foundation-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/path_provider_foundation.build/Objects-normal/arm64/path_provider_foundation-primary-emit-module.dia",
+    "pch" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/path_provider_foundation.build/Objects-normal/arm64/path_provider_foundation-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/path_provider_foundation.build/Objects-normal/arm64/path_provider_foundation-primary.swiftdeps"
+  },
+  "/Users/mvrock/.pub-cache/hosted/pub.dev/path_provider_foundation-2.4.3/darwin/path_provider_foundation/Sources/path_provider_foundation/PathProviderPlugin.swift" : {
+    "index-unit-output-path" : "/Pods.build/Release-iphoneos/path_provider_foundation.build/Objects-normal/arm64/PathProviderPlugin.o",
+    "llvm-bc" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/path_provider_foundation.build/Objects-normal/arm64/PathProviderPlugin.bc",
+    "object" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/path_provider_foundation.build/Objects-normal/arm64/PathProviderPlugin.o"
+  },
+  "/Users/mvrock/.pub-cache/hosted/pub.dev/path_provider_foundation-2.4.3/darwin/path_provider_foundation/Sources/path_provider_foundation/messages.g.swift" : {
+    "index-unit-output-path" : "/Pods.build/Release-iphoneos/path_provider_foundation.build/Objects-normal/arm64/messages.g.o",
+    "llvm-bc" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/path_provider_foundation.build/Objects-normal/arm64/messages.g.bc",
+    "object" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/path_provider_foundation.build/Objects-normal/arm64/messages.g.o"
+  }
+}

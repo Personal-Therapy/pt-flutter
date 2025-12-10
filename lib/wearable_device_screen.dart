@@ -1,6 +1,9 @@
 import 'package:flutter/material.dart';
-import 'package:health/health.dart' as health;
+import 'dart:async';
+import 'dart:io'; // Platform detection
 import 'package:untitled/main_screen.dart'; // Import main_screen.dart to use its color constants
+import 'package:untitled/services/health_service.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 // [!!] 1. 새 RTF 파일에서 추가된 색상
 const Color kConnectedGreen = Color(0xFF21C45D); // "연결됨"
@@ -19,215 +22,213 @@ class WearableDeviceScreen extends StatefulWidget {
 }
 
 class _WearableDeviceScreenState extends State<WearableDeviceScreen> {
-  health.Health healthFactory = health.Health();
-  List<health.HealthDataPoint> _healthDataList = [];
+  final HealthService _healthService = HealthService();
+  final String? _currentUserId = FirebaseAuth.instance.currentUser?.uid;
+
+  Timer? _dataUpdateTimer;
+  bool _isLoading = true;
+  bool _isConnected = false;
+
+  // 실시간 모니터링 데이터
   int _steps = 0;
   double _activeCalories = 0;
-  int _moveMinutes = 0;
-
-  // define the types to get
-  static final types = [
-    health.HealthDataType.STEPS,
-    health.HealthDataType.ACTIVE_ENERGY_BURNED,
-    health.HealthDataType.HEART_RATE,
-    health.HealthDataType.HEART_RATE_VARIABILITY_SDNN,
-  ];
-
-  // [!!] 2. 헬스 커넥트 연동 상태 (예시 데이터)
-  // (Health Connect 연동 시 이 값들이 실시간으로 업데이트되어야 함)
-  bool _isConnected = true;
-  bool _isConnecting = false;
-
-  // (예시) 실시간 모니터링 데이터
   int _currentHR = 72;
   int _currentHRV = 35;
+  int _restingHR = 65;
   int _currentStress = 45;
-  String _currentStressLabel = '보통';
-  String _userState = '보통'; // Add user state
-  Color _userStateColor = kStressNormal; // Add user state color
+  String _userState = '보통';
+  String _recommendation = '';
+  Color _userStateColor = kStressNormal;
 
-  // (예시) 연결된 기기 목록r
-  List<Map<String, dynamic>> _connectedDevices = [
-    {'name': 'Apple Watch Series 9', 'battery': 78, 'status': '방금 전'},
-  ];
+  // 연결된 기기 목록
+  List<Map<String, dynamic>> _connectedDevices = [];
 
-  // (예시) 사용 가능한 기기 목록
-  List<Map<String, String>> _availableDevices = [
-    {'name': 'Galaxy Watch 6', 'brand': 'Samsung'},
-    {'name': 'Fitbit Charge 6', 'brand': 'Fitbit'},
-    {'name': 'Oura Ring Gen3', 'brand': 'Oura'},
-  ];
-
-  // (예시) 스트레스 로그 데이터
-  List<Map<String, dynamic>> _stressLog = [
-    {'time': '06:00', 'hr': 65, 'hrv': 45, 'stress': 20},
-    {'time': '08:00', 'hr': 70, 'hrv': 40, 'stress': 30},
-    {'time': '10:00', 'hr': 78, 'hrv': 35, 'stress': 45},
-    {'time': '12:00', 'hr': 82, 'hrv': 32, 'stress': 55},
-    {'time': '14:00', 'hr': 88, 'hrv': 28, 'stress': 70},
-    {'time': '16:00', 'hr': 85, 'hrv': 30, 'stress': 60},
-    {'time': '18:00', 'hr': 75, 'hrv': 38, 'stress': 40},
-    {'time': '20:00', 'hr': 68, 'hrv': 42, 'stress': 25},
-  ];
+  // 스트레스 로그 데이터 (실제 데이터로 채워짐)
+  List<Map<String, dynamic>> _stressLog = [];
 
   @override
   void initState() {
     super.initState();
-    fetchActivityData();
+    _initializeHealthData();
+    // 5분마다 데이터 업데이트
+    _dataUpdateTimer = Timer.periodic(
+      const Duration(minutes: 5),
+      (timer) => _refreshHealthData(),
+    );
   }
 
-  // Analyze user state based on HR and HRV
-  void _analyzeUserState(int hr, int hrv) {
-    // This is a simple rule-based model.
-    // A more sophisticated model could be used for more accuracy.
-    if (hrv < 30 && hr > 80) {
-      _userState = '스트레스';
-      _userStateColor = kStressHigh;
-    } else if (hrv > 60 && hr < 65) {
-      _userState = '편안함';
-      _userStateColor = kStressLow;
-    } else {
-      _userState = '보통';
-      _userStateColor = kStressNormal;
-    }
+  @override
+  void dispose() {
+    _dataUpdateTimer?.cancel();
+    super.dispose();
   }
 
-  Future<void> fetchActivityData() async {
-    // request authorization
-    bool requested = await healthFactory.requestAuthorization(types);
-
-    if (requested) {
-      final now = DateTime.now();
-      final yesterday = now.subtract(Duration(days: 1));
-      try {
-        // fetch health data
-        List<health.HealthDataPoint> healthData =
-        await healthFactory.getHealthDataFromTypes(types: types, startTime: yesterday, endTime: now);
-
-        // save all the new data points
-        _healthDataList.addAll(healthData);
-
-        // filter out duplicates
-        _healthDataList = _healthDataList.toSet().toList();
-
-        // update the state with the new data
-        setState(() {
-          _steps = (_healthDataList.firstWhere(
-                  (p) => p.type == health.HealthDataType.STEPS,
-              orElse: () => health.HealthDataPoint(
-                uuid: '',
-                  value: health.NumericHealthValue(numericValue: 0),
-                  type: health.HealthDataType.STEPS,
-                  unit: health.HealthDataUnit.COUNT,
-                  dateFrom: yesterday,
-                  dateTo: now,
-                  sourcePlatform: health.HealthPlatformType.googleHealthConnect,
-                  sourceDeviceId: '',
-                  sourceId: '',
-                  sourceName: ''))
-              .value as health.NumericHealthValue)
-              .numericValue
-              .round();
-          _activeCalories = (_healthDataList.firstWhere(
-                  (p) => p.type == health.HealthDataType.ACTIVE_ENERGY_BURNED,
-              orElse: () => health.HealthDataPoint(
-                  uuid: '',
-                  value: health.NumericHealthValue(numericValue: 0),
-                  type: health.HealthDataType.ACTIVE_ENERGY_BURNED,
-                  unit: health.HealthDataUnit.KILOCALORIE,
-                  dateFrom: yesterday,
-                  dateTo: now,
-                  sourcePlatform: health.HealthPlatformType.googleHealthConnect,
-                  sourceDeviceId: '',
-                  sourceId: '',
-                  sourceName: ''))
-              .value as health.NumericHealthValue)
-              .numericValue.toDouble();
-          _currentHR = (_healthDataList.firstWhere(
-                  (p) => p.type == health.HealthDataType.HEART_RATE,
-              orElse: () => health.HealthDataPoint(
-                  uuid: '',
-                  value: health.NumericHealthValue(numericValue: 72),
-                  type: health.HealthDataType.HEART_RATE,
-                  unit: health.HealthDataUnit.BEATS_PER_MINUTE,
-                  dateFrom: yesterday,
-                  dateTo: now,
-                  sourcePlatform: health.HealthPlatformType.googleHealthConnect,
-                  sourceDeviceId: '',
-                  sourceId: '',
-                  sourceName: ''))
-              .value as health.NumericHealthValue)
-              .numericValue
-              .round();
-          _currentHRV = (_healthDataList.firstWhere(
-                  (p) => p.type == health.HealthDataType.HEART_RATE_VARIABILITY_SDNN,
-              orElse: () => health.HealthDataPoint(
-                  uuid: '',
-                  value: health.NumericHealthValue(numericValue: 35),
-                  type: health.HealthDataType.HEART_RATE_VARIABILITY_SDNN,
-                  unit: health.HealthDataUnit.MILLISECOND,
-                  dateFrom: yesterday,
-                  dateTo: now,
-                  sourcePlatform: health.HealthPlatformType.googleHealthConnect,
-                  sourceDeviceId: '',
-                  sourceId: '',
-                  sourceName: ''))
-              .value as health.NumericHealthValue)
-              .numericValue
-              .round();
-
-          // Analyze user state
-          _analyzeUserState(_currentHR, _currentHRV);
-        });
-      } catch (e) {
-        print("Caught exception in getHealthDataFromTypes: $e");
-      }
-    } else {
-      print("Authorization not granted");
-    }
-  }
-
-
-  // [!!] 3. Health Connect 연동을 위한 헬퍼 함수 (확장 지점)
-  Future<void> _connectToHealthConnect(String deviceName) async {
-    if (_isConnecting) return;
-
+  /// Health 데이터 초기화
+  Future<void> _initializeHealthData() async {
     setState(() {
-      _isConnecting = true;
+      _isLoading = true;
     });
 
-    // --- Health Connect 연동 로직 (TODO) ---
-    // (기존 로직은 동일)
     try {
-      // HealthFactory 초기화
-      // HealthFactory health = HealthFactory();
+      // Android: Health Connect 상태 확인
+      if (Platform.isAndroid) {
+        final status = await _healthService.checkHealthConnectStatus();
+        print('Health Connect SDK 상태: $status');
 
-      // ... 권한 요청 (types 정의) ...
-      // bool requested = await health.requestAuthorization(types);
-      bool requested = await Future.delayed(Duration(seconds: 2), () => true); // (임시) 2초 로딩
+        if (status.toString().contains('unavailable')) {
+          _showErrorSnackBar('Health Connect가 설치되지 않았습니다.\nGoogle Play에서 Health Connect를 설치하세요.');
+          return;
+        }
+      }
 
-      if (requested) {
-        // [!!] 4. 연동 성공 시 UI 업데이트 (예시)
+      // 권한 요청
+      print('권한 요청 시작...');
+      bool authorized = await _healthService.requestAuthorization();
+      print('권한 요청 결과: $authorized');
+
+      if (authorized) {
+        await _refreshHealthData();
+        await _loadTodayStressLog();
+
         setState(() {
           _isConnected = true;
-          _availableDevices.removeWhere((device) => device['name'] == deviceName);
-          _connectedDevices.add({
-            'name': deviceName,
-            'battery': 100, // (임시)
-            'status': '방금 전'
-          });
+          // 플랫폼별 기기 이름 설정
+          if (Platform.isIOS) {
+            _connectedDevices = [
+              {'name': 'Apple Watch', 'battery': 85, 'status': '방금 전'},
+            ];
+          } else if (Platform.isAndroid) {
+            _connectedDevices = [
+              {'name': 'Health Connect', 'battery': null, 'status': 'Health Connect 연동'},
+            ];
+          } else {
+            _connectedDevices = [
+              {'name': 'Health Connect', 'battery': null, 'status': '연동됨'},
+            ];
+          }
         });
       } else {
-        // 권한 거부 시
+        final errorMsg = Platform.isAndroid
+            ? 'Health Connect 권한이 필요합니다.\nHealth Connect 앱에서 이 앱의 권한을 확인하세요.'
+            : 'Apple Health 데이터 접근 권한이 필요합니다.';
+        _showErrorSnackBar(errorMsg);
       }
     } catch (e) {
-      // 에러 처리
+      _showErrorSnackBar('데이터를 가져오는 중 오류가 발생했습니다: $e');
     } finally {
       setState(() {
-        _isConnecting = false;
+        _isLoading = false;
       });
     }
-    // --- 연동 로직 끝 ---
+  }
+
+  /// Health 데이터 새로고침
+  Future<void> _refreshHealthData() async {
+    try {
+      final healthData = await _healthService.fetchRecentHealthData();
+
+      setState(() {
+        _steps = healthData['steps'] ?? 0;
+        _activeCalories = healthData['activeCalories'] ?? 0.0;
+        _currentHR = healthData['currentHR'] ?? 72;
+        _currentHRV = healthData['currentHRV'] ?? 35;
+        _restingHR = healthData['restingHR'] ?? 65;
+      });
+
+      // 사용자 상태 분석
+      _analyzeUserState();
+
+      // Firestore에 저장
+      final userId = _currentUserId;
+      if (userId != null) {
+        await _healthService.saveHealthDataToFirestore(userId, {
+          'steps': _steps,
+          'activeCalories': _activeCalories,
+          'heartRate': _currentHR,
+          'hrv': _currentHRV,
+          'restingHR': _restingHR,
+          'stressLevel': _currentStress,
+          'userState': _userState,
+          'timestamp': DateTime.now(),
+        });
+      }
+    } catch (e) {
+      print('데이터 새로고침 실패: $e');
+    }
+  }
+
+  /// 오늘의 스트레스 로그 로드
+  Future<void> _loadTodayStressLog() async {
+    try {
+      final now = DateTime.now();
+      final startOfDay = DateTime(now.year, now.month, now.day);
+      final stressLog = await _healthService.fetchHourlyHeartData(startOfDay);
+
+      setState(() {
+        _stressLog = stressLog;
+      });
+    } catch (e) {
+      print('스트레스 로그 로드 실패: $e');
+    }
+  }
+
+  /// 사용자 상태 분석
+  void _analyzeUserState() {
+    final analysis = _healthService.analyzeUserState(
+      _currentHR,
+      _currentHRV,
+      _restingHR,
+    );
+
+    setState(() {
+      _userState = analysis['state'];
+      _currentStress = analysis['stressLevel'];
+      _recommendation = analysis['recommendation'];
+
+      // 상태별 색상 설정
+      if (_userState.contains('높은 스트레스')) {
+        _userStateColor = kStressHigh;
+      } else if (_userState.contains('편안')) {
+        _userStateColor = kStressLow;
+      } else {
+        _userStateColor = kStressNormal;
+      }
+    });
+  }
+
+  /// 에러 메시지 표시
+  void _showErrorSnackBar(String message) {
+    if (mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(message), backgroundColor: kColorError),
+      );
+    }
+  }
+
+  /// Health Connect 앱 설명 다이얼로그 표시 (Android만)
+  Future<void> _showHealthConnectGuide() async {
+    if (Platform.isAndroid) {
+      showDialog(
+        context: context,
+        builder: (context) => AlertDialog(
+          title: const Text('Health Connect 권한 설정'),
+          content: const Text(
+            '1. 설정 앱을 엽니다\n'
+            '2. "앱" 또는 "애플리케이션"을 선택합니다\n'
+            '3. "Health Connect"를 찾아 선택합니다\n'
+            '4. "앱 권한" 또는 "권한"을 선택합니다\n'
+            '5. "Personal Therapy" 앱을 찾아 필요한 권한을 허용합니다\n\n'
+            '또는 아래 "권한 재요청" 버튼을 눌러 권한을 다시 요청하세요.'
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(context),
+              child: const Text('확인'),
+            ),
+          ],
+        ),
+      );
+    }
   }
 
 
@@ -235,21 +236,19 @@ class _WearableDeviceScreenState extends State<WearableDeviceScreen> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: kColorBgStart,
-      // [!!] 5. 새 RTF 디자인은 extendBodyBehindAppBar: false가 더 적합
-      // extendBodyBehindAppBar: true,
       appBar: AppBar(
         backgroundColor: kColorBgStart,
         elevation: 0,
         leading: IconButton(
-          icon: Icon(
+          icon: const Icon(
             Icons.arrow_back,
             color: kColorTextTitle,
             size: 20,
           ),
           onPressed: () => Navigator.pop(context),
         ),
-        title: Text(
-          '웨어러블 연동', // [!!] 6. RTF에 맞게 타이틀 변경
+        title: const Text(
+          '웨어러블 연동',
           style: TextStyle(
             color: kColorTextTitle,
             fontSize: 18,
@@ -257,27 +256,52 @@ class _WearableDeviceScreenState extends State<WearableDeviceScreen> {
           ),
         ),
         centerTitle: true,
+        actions: [
+          IconButton(
+            icon: const Icon(Icons.refresh, color: kColorBtnPrimary),
+            onPressed: _isLoading ? null : _refreshHealthData,
+          ),
+        ],
       ),
-      body: SingleChildScrollView(
-        // [!!] 7. RTF에 맞게 padding 변경 (상단 80px 제거)
-        padding: const EdgeInsets.all(24.0),
-        child: Column(
-          children: [
-            // [!!] 8. 새로운 UI 위젯들 호출
-            _buildRealtimeMonitoringCard(),
-            SizedBox(height: 24),
-            _buildActivityCard(),
-            SizedBox(height: 24),
-            _buildConnectedDevicesCard(),
-            SizedBox(height: 24),
-            _buildAvailableDevicesCard(),
-            SizedBox(height: 24),
-            _buildStressLogCard(),
-            SizedBox(height: 24),
-            _buildHealthConnectInfoCard(),
-          ],
-        ),
-      ),
+      body: _isLoading
+          ? const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('건강 데이터를 불러오는 중...',
+                      style: TextStyle(color: kColorTextSubtitle)),
+                ],
+              ),
+            )
+          : RefreshIndicator(
+              onRefresh: () async {
+                await _refreshHealthData();
+                await _loadTodayStressLog();
+              },
+              child: SingleChildScrollView(
+                physics: const AlwaysScrollableScrollPhysics(),
+                padding: const EdgeInsets.all(24.0),
+                child: Column(
+                  children: [
+                    _buildRealtimeMonitoringCard(),
+                    const SizedBox(height: 24),
+                    _buildActivityCard(),
+                    const SizedBox(height: 24),
+                    _buildConnectedDevicesCard(),
+                    const SizedBox(height: 24),
+                    if (_stressLog.isNotEmpty) ...[
+                      _buildStressLogCard(),
+                      const SizedBox(height: 24),
+                    ],
+                    _buildRecommendationCard(),
+                    const SizedBox(height: 24),
+                    _buildHealthConnectInfoCard(),
+                  ],
+                ),
+              ),
+            ),
     );
   }
 
@@ -380,36 +404,72 @@ class _WearableDeviceScreenState extends State<WearableDeviceScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text(
-                  '연결된 기기',
-                  style: TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.w600,
-                      color: kColorTextTitle
-                  )
-              ),
-              OutlinedButton.icon(
-                onPressed: () { /* TODO: 기기 검색 로직 */ },
-                icon: Icon(Icons.search, size: 16),
-                label: Text('기기 검색'),
-                style: OutlinedButton.styleFrom(
-                  foregroundColor: kColorTextTitle,
-                  side: BorderSide(color: kColorEditTextBg),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
-                ),
-              ),
-            ],
+          const Text(
+              '연결된 기기',
+              style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.w600,
+                  color: kColorTextTitle
+              )
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           // 연결된 기기 목록
           _connectedDevices.isEmpty
               ? Center(
             child: Padding(
               padding: const EdgeInsets.symmetric(vertical: 24.0),
-              child: Text('현재 연동된 기기가 없습니다.', style: TextStyle(color: kColorTextSubtitle)),
+              child: Column(
+                children: [
+                  const Icon(Icons.watch_off_outlined, size: 48, color: kColorTextHint),
+                  const SizedBox(height: 12),
+                  Text(
+                    Platform.isIOS
+                        ? 'Apple Health 권한이 필요합니다.'
+                        : 'Health Connect 권한이 필요합니다.',
+                    style: const TextStyle(
+                      color: kColorTextTitle,
+                      fontSize: 16,
+                      fontWeight: FontWeight.w600,
+                    )
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    Platform.isIOS
+                        ? '설정 > 개인정보 보호 > 건강에서 권한을 허용하세요.'
+                        : '앱 설정에서 Health Connect 권한을 허용하세요.',
+                    style: const TextStyle(color: kColorTextSubtitle),
+                    textAlign: TextAlign.center,
+                  ),
+                  const SizedBox(height: 16),
+                  if (Platform.isAndroid)
+                    Column(
+                      children: [
+                        ElevatedButton.icon(
+                          onPressed: _initializeHealthData,
+                          icon: const Icon(Icons.refresh, size: 18),
+                          label: const Text('권한 재요청'),
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: kColorBtnPrimary,
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 12),
+                            shape: RoundedRectangleBorder(
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        TextButton.icon(
+                          onPressed: _showHealthConnectGuide,
+                          icon: const Icon(Icons.help_outline, size: 18),
+                          label: const Text('권한 설정 방법 보기'),
+                          style: TextButton.styleFrom(
+                            foregroundColor: kColorBtnPrimary,
+                          ),
+                        ),
+                      ],
+                    ),
+                ],
+              ),
             ),
           )
               : Column(
@@ -427,97 +487,82 @@ class _WearableDeviceScreenState extends State<WearableDeviceScreen> {
   }
 
   /// 연결된 기기 Row 헬퍼
-  Widget _buildConnectedDeviceRow({required String name, required int battery, required String status}) {
+  Widget _buildConnectedDeviceRow({required String name, required int? battery, required String status}) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12.0),
       child: Row(
         children: [
-          Icon(Icons.watch, size: 32, color: kColorBtnPrimary), // (임시 아이콘)
-          SizedBox(width: 16),
+          const Icon(Icons.watch, size: 32, color: kColorBtnPrimary),
+          const SizedBox(width: 16),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
                     name,
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: kColorTextTitle)
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: kColorTextTitle)
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: 4),
                 Text(
-                    '$battery%・$status',
-                    style: TextStyle(fontSize: 14, color: kColorTextSubtitle)
+                    battery != null ? '$battery%・$status' : status,
+                    style: const TextStyle(fontSize: 14, color: kColorTextSubtitle)
                 ),
               ],
             ),
           ),
-          Icon(Icons.more_vert, color: kColorTextSubtitle),
         ],
       ),
     );
   }
 
-  /// '사용 가능한 기기' 카드
-  Widget _buildAvailableDevicesCard() {
+  /// '건강 조언' 카드
+  Widget _buildRecommendationCard() {
     return _buildSettingCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
-              '사용 가능한 기기',
-              style: TextStyle(
-                  fontSize: 18,
-                  fontWeight: FontWeight.w600,
-                  color: kColorTextTitle
-              )
+          Row(
+            children: [
+              Icon(Icons.lightbulb_outline, color: kColorBtnPrimary, size: 24),
+              const SizedBox(width: 8),
+              const Text(
+                  '건강 조언',
+                  style: TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.w600,
+                      color: kColorTextTitle
+                  )
+              ),
+            ],
           ),
-          SizedBox(height: 16),
-          // 사용 가능한 기기 목록
-          Column(
-            children: _availableDevices.map((device) =>
-                _buildAvailableDeviceRow(
-                  name: device['name']!,
-                  brand: device['brand']!,
-                  onConnect: () => _connectToHealthConnect(device['name']!),
-                )
-            ).toList(),
-          ),
-        ],
-      ),
-    );
-  }
-
-  /// 사용 가능한 기기 Row 헬퍼
-  Widget _buildAvailableDeviceRow({required String name, required String brand, required VoidCallback onConnect}) {
-    return Padding(
-      padding: const EdgeInsets.symmetric(vertical: 8.0),
-      child: Row(
-        children: [
-          Icon(Icons.watch_outlined, size: 32, color: kColorTextSubtitle), // (임시 아이콘)
-          SizedBox(width: 16),
-          Expanded(
+          const SizedBox(height: 16),
+          Container(
+            padding: const EdgeInsets.all(16),
+            decoration: BoxDecoration(
+              color: _userStateColor.withOpacity(0.1),
+              borderRadius: BorderRadius.circular(12),
+            ),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Text(
-                    name,
-                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500, color: kColorTextTitle)
+                  '현재 상태: $_userState',
+                  style: TextStyle(
+                    fontSize: 16,
+                    fontWeight: FontWeight.bold,
+                    color: _userStateColor,
+                  ),
                 ),
-                SizedBox(height: 4),
+                const SizedBox(height: 8),
                 Text(
-                    brand,
-                    style: TextStyle(fontSize: 14, color: kColorTextSubtitle)
+                  _recommendation.isEmpty ? '데이터를 수집하는 중입니다.' : _recommendation,
+                  style: const TextStyle(
+                    fontSize: 14,
+                    color: kColorTextSubtitle,
+                    height: 1.5,
+                  ),
                 ),
               ],
-            ),
-          ),
-          ElevatedButton(
-            onPressed: onConnect,
-            child: Text('연결'),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: kColorEditTextBg,
-              foregroundColor: kColorBtnPrimary,
-              elevation: 0,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
           ),
         ],
@@ -527,6 +572,9 @@ class _WearableDeviceScreenState extends State<WearableDeviceScreen> {
 
   /// '오늘의 스트레스 변화' 카드
   Widget _buildStressLogCard() {
+    // 실제 데이터로부터 통계 계산
+    final stats = _calculateStressStatistics();
+
     return _buildSettingCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -552,15 +600,51 @@ class _WearableDeviceScreenState extends State<WearableDeviceScreen> {
             ).toList(),
           ),
           Divider(height: 32),
-          // 스트레스 요약
+          // 스트레스 요약 (실제 계산된 값 사용)
           _buildStressSummaryRow(
-            avgStress: 43, // (예시)
-            maxStress: 70, // (예시)
-            avgHr: 76,     // (예시)
+            avgStress: stats['avgStress']!,
+            maxStress: stats['maxStress']!,
+            avgHr: stats['avgHr']!,
           ),
         ],
       ),
     );
+  }
+
+  /// 스트레스 로그로부터 통계 계산
+  Map<String, int> _calculateStressStatistics() {
+    if (_stressLog.isEmpty) {
+      return {
+        'avgStress': 0,
+        'maxStress': 0,
+        'avgHr': 0,
+      };
+    }
+
+    int totalStress = 0;
+    int maxStress = 0;
+    int totalHr = 0;
+
+    for (var log in _stressLog) {
+      final stress = log['stress'] as int;
+      final hr = log['hr'] as int;
+
+      totalStress += stress;
+      totalHr += hr;
+
+      if (stress > maxStress) {
+        maxStress = stress;
+      }
+    }
+
+    final avgStress = (totalStress / _stressLog.length).round();
+    final avgHr = (totalHr / _stressLog.length).round();
+
+    return {
+      'avgStress': avgStress,
+      'maxStress': maxStress,
+      'avgHr': avgHr,
+    };
   }
 
   /// 스트레스 로그 Row 헬퍼
@@ -643,31 +727,36 @@ class _WearableDeviceScreenState extends State<WearableDeviceScreen> {
 
   /// 'Health Connect 연동 정보' 카드
   Widget _buildHealthConnectInfoCard() {
+    final cardTitle = Platform.isIOS ? 'Apple Health 연동 정보' : 'Health Connect 연동 정보';
+    final syncInfo = Platform.isIOS
+        ? 'Apple Watch에서 자동으로 동기화됩니다.'
+        : 'Samsung Health 등 연결된 앱에서 데이터를 가져옵니다.';
+
     return _buildSettingCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
           Text(
-              'Health Connect 연동 정보',
-              style: TextStyle(
+              cardTitle,
+              style: const TextStyle(
                   fontSize: 18,
                   fontWeight: FontWeight.w600,
                   color: kColorTextTitle
               )
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           _buildInfoRow(
             icon: Icons.monitor_heart,
             title: '실시간 생체 데이터',
             subtitle: '심박수, 심박변이도를 통해 스트레스 지수를 자동 계산합니다.',
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           _buildInfoRow(
-            icon: Icons.hourglass_top,
-            title: '시간별 추적',
-            subtitle: '2시간 간격으로 자동 측정되어 하루 종일 모니터링됩니다.',
+            icon: Icons.sync,
+            title: '자동 동기화',
+            subtitle: syncInfo,
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           _buildInfoRow(
             icon: Icons.shield_outlined,
             title: '개인정보 보호',
@@ -724,7 +813,7 @@ class _WearableDeviceScreenState extends State<WearableDeviceScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            Text(
+            const Text(
                 '오늘의 활동',
                 style: TextStyle(
                     fontSize: 18,
@@ -732,13 +821,12 @@ class _WearableDeviceScreenState extends State<WearableDeviceScreen> {
                     color: kColorTextTitle
                 )
             ),
-            SizedBox(height: 20),
+            const SizedBox(height: 20),
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _buildStatItem(Icons.directions_walk, _steps, '걸음', '걸음 수', kPrimaryGreen),
                 _buildStatItem(Icons.local_fire_department, _activeCalories.round(), 'kcal', '소모 칼로리', kColorError),
-                _buildStatItem(Icons.timer, _moveMinutes, '분', '움직인 시간', kColorBtnPrimary),
               ],
             ),
           ],

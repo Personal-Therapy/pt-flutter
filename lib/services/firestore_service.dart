@@ -1,5 +1,4 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
-import 'package:firebase_auth/firebase_auth.dart';
 
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -28,11 +27,21 @@ class FirestoreService {
   }
 
   // Update user mood score
-  Future<void> updateMoodScore(String uid, int moodScore) async {
-    await _db.collection('users').doc(uid).collection('mood_scores').add({
+  Future<void> updateMoodScore(
+    String uid,
+    int moodScore, {
+    Map<String, dynamic>? detailedAnswers,
+    double? detailScore,
+    Map<String, String>? categories,
+  }) async {
+    final data = {
       'score': moodScore,
       'timestamp': FieldValue.serverTimestamp(),
-    });
+      if (detailedAnswers != null) 'detailedAnswers': detailedAnswers,
+      if (detailScore != null) 'detailScore': detailScore,
+      if (categories != null) 'categories': categories,
+    };
+    await _db.collection('users').doc(uid).collection('mood_scores').add(data);
   }
 
   // Get user mood scores
@@ -64,11 +73,14 @@ class FirestoreService {
         .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
   }
 
-  // Update user sleep time
+  // Update user sleep time (하루에 한 번만 저장, 같은 날이면 업데이트)
   Future<void> addSleepRecord(String uid, double duration) async {
-    await _db.collection('users').doc(uid).collection('sleep_records').add({
+    final now = DateTime.now();
+    final dateKey = '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
+
+    await _db.collection('users').doc(uid).collection('sleep_records').doc(dateKey).set({
       'duration': duration,
-      'timestamp': FieldValue.serverTimestamp(),
+      'timestamp': Timestamp.fromDate(DateTime(now.year, now.month, now.day)),
     });
   }
 
@@ -82,6 +94,55 @@ class FirestoreService {
           .map((doc) => doc.data())
           .where((data) => data['timestamp'] != null && data['duration'] != null)
           .toList();
+    });
+  }
+
+  // 개발용: 모든 수면 기록 삭제
+  Future<void> deleteAllSleepRecords(String uid) async {
+    final snapshot = await _db.collection('users').doc(uid).collection('sleep_records').get();
+    for (var doc in snapshot.docs) {
+      await doc.reference.delete();
+    }
+  }
+
+  // 안심 연락망 관리
+  Future<void> addEmergencyContact(String uid, Map<String, dynamic> contact) async {
+    final userDoc = _db.collection('users').doc(uid);
+    await userDoc.update({
+      'emergencyContacts': FieldValue.arrayUnion([contact])
+    });
+  }
+
+  Future<void> updateEmergencyContact(String uid, int index, Map<String, dynamic> contact) async {
+    final userDoc = await _db.collection('users').doc(uid).get();
+    if (userDoc.exists) {
+      List<dynamic> contacts = List.from(userDoc.data()?['emergencyContacts'] ?? []);
+      if (index < contacts.length) {
+        contacts[index] = contact;
+        await _db.collection('users').doc(uid).update({'emergencyContacts': contacts});
+      }
+    }
+  }
+
+  Future<void> deleteEmergencyContact(String uid, int index) async {
+    final userDoc = await _db.collection('users').doc(uid).get();
+    if (userDoc.exists) {
+      List<dynamic> contacts = List.from(userDoc.data()?['emergencyContacts'] ?? []);
+      if (index < contacts.length) {
+        contacts.removeAt(index);
+        await _db.collection('users').doc(uid).update({'emergencyContacts': contacts});
+      }
+    }
+  }
+
+  Stream<List<Map<String, dynamic>>> getEmergencyContactsStream(String uid) {
+    return _db.collection('users').doc(uid).snapshots().map((snapshot) {
+      if (snapshot.exists && snapshot.data()?['emergencyContacts'] != null) {
+        return List<Map<String, dynamic>>.from(
+          snapshot.data()!['emergencyContacts'].map((contact) => Map<String, dynamic>.from(contact))
+        );
+      }
+      return [];
     });
   }
 }

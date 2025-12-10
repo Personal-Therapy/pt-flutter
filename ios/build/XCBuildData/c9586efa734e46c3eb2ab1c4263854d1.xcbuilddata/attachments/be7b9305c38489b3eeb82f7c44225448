@@ -1,0 +1,41 @@
+{
+  "" : {
+    "const-values" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/health.build/Objects-normal/arm64/health-primary.swiftconstvalues",
+    "dependencies" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/health.build/Objects-normal/arm64/health-primary.d",
+    "diagnostics" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/health.build/Objects-normal/arm64/health-primary.dia",
+    "emit-module-dependencies" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/health.build/Objects-normal/arm64/health-primary-emit-module.d",
+    "emit-module-diagnostics" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/health.build/Objects-normal/arm64/health-primary-emit-module.dia",
+    "pch" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/health.build/Objects-normal/arm64/health-primary-Bridging-header.pch",
+    "swift-dependencies" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/health.build/Objects-normal/arm64/health-primary.swiftdeps"
+  },
+  "/Users/mvrock/.pub-cache/hosted/pub.dev/health-13.2.1/ios/Classes/HealthConstants.swift" : {
+    "index-unit-output-path" : "/Pods.build/Release-iphoneos/health.build/Objects-normal/arm64/HealthConstants.o",
+    "llvm-bc" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/health.build/Objects-normal/arm64/HealthConstants.bc",
+    "object" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/health.build/Objects-normal/arm64/HealthConstants.o"
+  },
+  "/Users/mvrock/.pub-cache/hosted/pub.dev/health-13.2.1/ios/Classes/HealthDataOperations.swift" : {
+    "index-unit-output-path" : "/Pods.build/Release-iphoneos/health.build/Objects-normal/arm64/HealthDataOperations.o",
+    "llvm-bc" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/health.build/Objects-normal/arm64/HealthDataOperations.bc",
+    "object" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/health.build/Objects-normal/arm64/HealthDataOperations.o"
+  },
+  "/Users/mvrock/.pub-cache/hosted/pub.dev/health-13.2.1/ios/Classes/HealthDataReader.swift" : {
+    "index-unit-output-path" : "/Pods.build/Release-iphoneos/health.build/Objects-normal/arm64/HealthDataReader.o",
+    "llvm-bc" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/health.build/Objects-normal/arm64/HealthDataReader.bc",
+    "object" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/health.build/Objects-normal/arm64/HealthDataReader.o"
+  },
+  "/Users/mvrock/.pub-cache/hosted/pub.dev/health-13.2.1/ios/Classes/HealthDataWriter.swift" : {
+    "index-unit-output-path" : "/Pods.build/Release-iphoneos/health.build/Objects-normal/arm64/HealthDataWriter.o",
+    "llvm-bc" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/health.build/Objects-normal/arm64/HealthDataWriter.bc",
+    "object" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/health.build/Objects-normal/arm64/HealthDataWriter.o"
+  },
+  "/Users/mvrock/.pub-cache/hosted/pub.dev/health-13.2.1/ios/Classes/HealthUtilities.swift" : {
+    "index-unit-output-path" : "/Pods.build/Release-iphoneos/health.build/Objects-normal/arm64/HealthUtilities.o",
+    "llvm-bc" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/health.build/Objects-normal/arm64/HealthUtilities.bc",
+    "object" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/health.build/Objects-normal/arm64/HealthUtilities.o"
+  },
+  "/Users/mvrock/.pub-cache/hosted/pub.dev/health-13.2.1/ios/Classes/SwiftHealthPlugin.swift" : {
+    "index-unit-output-path" : "/Pods.build/Release-iphoneos/health.build/Objects-normal/arm64/SwiftHealthPlugin.o",
+    "llvm-bc" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/health.build/Objects-normal/arm64/SwiftHealthPlugin.bc",
+    "object" : "/Users/mvrock/personal_therapy/ios/build/Pods.build/Release-iphoneos/health.build/Objects-normal/arm64/SwiftHealthPlugin.o"
+  }
+}

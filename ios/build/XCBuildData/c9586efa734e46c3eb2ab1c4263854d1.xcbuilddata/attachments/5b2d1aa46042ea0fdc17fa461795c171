@@ -1,0 +1,5 @@
+
+module flutter_inappwebview_ios.Swift {
+  header "flutter_inappwebview_ios-Swift.h"
+  requires objc
+}

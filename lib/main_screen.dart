@@ -3,15 +3,13 @@ import 'dart:ui';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:untitled/wearable_device_screen.dart';
 import 'package:untitled/profile_tab.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // Add this import
-import 'package:untitled/services/firestore_service.dart'; // Add this import
-import 'package:firebase_auth/firebase_auth.dart'; // Import moved here
-import 'package:untitled/services/firestore_service.dart'; // Import moved here
+import 'package:firebase_auth/firebase_auth.dart';
 
 // [!!] 1단계에서 만든 '추적' 탭 파일을 가져옵니다.
 import 'emotion_tracking_tab.dart';
 import 'healing_screen.dart';
 import 'diagnosis_screen.dart';
+import 'mood_detail_questions_screen.dart';
 
 // --- Color Definitions ---
 const Color kColorBgStart = Color(0xFFEFF6FF);
@@ -34,6 +32,8 @@ const Color kColorEmergencyCardBg = Color(0xFFFEE2E2); // 긴급 상황 카드 �
 const Color kColorEmergencyBtnText = Color(0xFFEF4444); // 긴급 버튼 텍스트 (진한 빨강)
 const Color kColorEmergencyBtnBorder = Color(0xFFEF4444); // 긴급 버튼 테두리 (진한 빨강)
 const Color kColorBottomNavInactive = Color(0xFF9CA3AF); // 하단바 비활성 아이콘/텍스트
+
+bool _isMoodSelected = false;
 
 // CSV 텍스트 데이터 (동일)
 final Map<String, String> kTexts = {
@@ -267,8 +267,6 @@ class _HomeScreenContent extends StatefulWidget {
 class _HomeScreenContentState extends State<_HomeScreenContent> {
   // '홈' 탭의 슬라이더 상태를 여기서 관리
   double _currentMoodValue = 5.0;
-
-  final FirestoreService _firestoreService = FirestoreService();
   final String? _currentUserId = FirebaseAuth.instance.currentUser?.uid;
 
   @override
@@ -459,9 +457,9 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
                 value: _currentMoodValue,
                 label: _currentMoodValue.round().toString(),
                 onChanged: (value) {
-                  // [!!] 이 위젯(_HomeScreenContent)의 상태를 업데이트
                   setState(() {
                     _currentMoodValue = value;
+                    _isMoodSelected = true; // 슬라이더를 움직였다는 표시
                   });
                 },
               ),
@@ -477,23 +475,23 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
             ),
             const SizedBox(height: 24.0),
             ElevatedButton(
-              onPressed: _currentUserId == null
-                  ? null // Disable button if no user is logged in
-                  : () async {
-                if (_currentUserId != null) {
-                  await _firestoreService.updateMoodScore(
-                      _currentUserId!, _currentMoodValue.round());
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('기분 점수가 저장되었습니다!')), 
-                  );
-                } else {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('로그인이 필요합니다.')),
-                  );
-                }
+              onPressed: (_currentUserId == null || !_isMoodSelected)
+                  ? null  // 로그인 안 했거나 기분을 선택하지 않으면 비활성화
+                  : () {
+                // 기분 분석 상세 질문 화면으로 이동
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => MoodDetailQuestionsScreen(
+                      moodScore: _currentMoodValue.round(),
+                      userId: _currentUserId,
+                    ),
+                  ),
+                );
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: kColorBtnPrimary,
+                disabledBackgroundColor: Colors.grey[300], // 비활성화 시 색상
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12.0),
                 ),
@@ -502,7 +500,9 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
               child: Text(
                 kTexts['mood_analyze_button']!,
                 style: GoogleFonts.roboto(
-                  color: Colors.white,
+                  color: (_currentUserId == null || !_isMoodSelected)
+                      ? Colors.grey[600]
+                      : Colors.white,
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
                 ),

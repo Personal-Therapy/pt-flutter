@@ -1,21 +1,19 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
+import 'package:untitled/auth_wrapper.dart';
+import 'package:firebase_core/firebase_core.dart';
+import 'package:untitled/firebase_options.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
-import 'package:firebase_core/firebase_core.dart'; // Add this import
-import 'firebase_options.dart'; // Add this import
-import 'package:untitled/auth_wrapper.dart'; // Import AuthWrapper
 
-// 1. 우리가 만든 로그인 화면 파일을 import 합니다.
-// (파일 경로가 'lib/login_screen.dart'라고 가정)
-import 'login_screen.dart';
-
-Future<void> main() async {
+void main() async {
   WidgetsFlutterBinding.ensureInitialized();
-  await dotenv.load(fileName: ".env"); // .env 파일 읽기
+
+  // Load .env file before initializing Firebase
+  await dotenv.load(fileName: ".env");
+
   await Firebase.initializeApp(
     options: DefaultFirebaseOptions.currentPlatform,
-  ); // Initialize Firebase
-
+  );
   runApp(const MyApp());
 }
 
@@ -39,9 +37,6 @@ class MyApp extends StatelessWidget {
         ),
       ),
 
-      // ▼▼▼ 이 부분이 핵심입니다 ▼▼▼
-      // 앱의 'home' (첫 화면)을
-      // 기본 'MyHomePage'가 아닌 'LoginScreen()'으로 지정합니다.
       home: const AuthWrapper(),
     );
   }
