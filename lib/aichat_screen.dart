@@ -1,10 +1,13 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
-import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
-final String geminiApiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
+// ⚠️ 실제 앱에서는 이렇게 하드코딩하지 말고
+// --dart-define=GEMINI_API_KEY=... 로 넘기거나, 안전한 저장소에 넣는 게 좋아.
+// 여기서는 구조 설명을 위해 상수로
+const String geminiApiKey = 'AIzaSyD2s8egs5QbN15S9NR8Dh2iTpFIvN0LCiA';
 
+// 네가 Java에서 쓰던 것과 같은 엔드포인트 구조
 const String geminiEndpoint =
     'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
@@ -37,7 +40,7 @@ class _AIChatScreenState extends State<AIChatScreen> {
     super.dispose();
   }
 
-  /// 상담사 응답 생성
+  /// ✅ MyApplication의 requestGeminiResponse()를 Dart로 옮긴 버전
   Future<String> _callGemini(String userMessage) async {
     if (geminiApiKey.isEmpty) {
       throw Exception('Gemini API 키가 설정되어 있지 않습니다.');
@@ -45,6 +48,7 @@ class _AIChatScreenState extends State<AIChatScreen> {
 
     final uri = Uri.parse('$geminiEndpoint?key=$geminiApiKey');
 
+    // 🧠 상담사 역할 + 스타일을 명시하는 프롬프트
     final counselorPrompt = '''
 너는 마음을 돌보는 온라인 상담 챗봇이야.
 
@@ -66,6 +70,8 @@ class _AIChatScreenState extends State<AIChatScreen> {
 $userMessage
 ''';
 
+    // Java에서 만든 requestBody:
+    // { "contents": [{ "parts": [{ "text": "..." }] }] }
     final requestBody = {
       'contents': [
         {
@@ -90,6 +96,8 @@ $userMessage
 
     final Map<String, dynamic> data = jsonDecode(response.body);
 
+    // Java 코드에서 했던 것:
+    // candidates[0].content.parts[0].text
     final candidates = data['candidates'];
     if (candidates is! List || candidates.isEmpty) {
       throw Exception('유효하지 않은 응답 형식 (candidates 없음)');
@@ -113,58 +121,37 @@ $userMessage
     return text;
   }
 
-  /// 감정 분석 수행
-  Future<EmotionAnalysisResult> _analyzeEmotions(String userMessage) async {
+  /// 🧠 유저 메시지에서 부정적인/위험 신호 단어를 LLM으로 뽑아내는 함수
+  Future<NegativeAnalysisResult> _analyzeNegativeWords(String userMessage) async {
     if (geminiApiKey.isEmpty) {
-      return EmotionAnalysisResult.empty();
+      return NegativeAnalysisResult.empty();
     }
 
     final uri = Uri.parse('$geminiEndpoint?key=$geminiApiKey');
 
+    // ⚠️ 프롬프트는 "반드시 JSON만 반환" 하도록 강하게 명령하는 게 포인트
     final prompt = '''
-너는 한국어 심리상담 전문 분석가야.
+너는 한국어 심리상담 도우미야.
 
-사용자 메시지를 분석하여 다음 JSON 형식으로만 응답해:
-{
-  "emotions": {
-    "joy": 0-10,
-    "sadness": 0-10,
-    "anger": 0-10,
-    "anxiety": 0-10,
-    "peace": 0-10
-  },
-  "mentalHealthSignals": {
-    "depression": 0-10,
-    "anxiety": 0-10,
-    "stress": 0-10
-  },
-  "sentiment": {
-    "positive": 0.00-1.00,
-    "negative": 0.00-1.00,
-    "neutral": 0.00-1.00
-  },
-  "keywords": ["키워드1", "키워드2", ...]
-}
+사용자의 문장에서 다음을 분석해줘:
+1) 자해/자살, 극단적 선택, 무기력, 우울, 불안, 공포, 심한 욕설 등 "부정적/위험 신호"가 되는 표현이 있는지
+2) 얼마나 심각한지: "none", "low", "medium", "high" 중 하나
+3) 그런 표현들(단어/짧은 구)을 리스트로 뽑기
 
-[분석 기준]
-- emotions: 각 감정의 강도 (0=없음, 10=매우 강함)
-  - joy: 기쁨, 행복, 즐거움
-  - sadness: 슬픔, 우울함, 허무함
-  - anger: 분노, 짜증, 억울함
-  - anxiety: 불안, 걱정, 두려움
-  - peace: 평온, 안정, 편안함
-- mentalHealthSignals: 정신건강 관련 신호 강도 (0=없음, 10=매우 심각)
-  - depression: 우울증 관련 신호 (무기력, 흥미상실, 자책 등)
-  - anxiety: 불안장애 관련 신호 (과도한 걱정, 공황 등)
-  - stress: 스트레스 관련 신호 (압박감, 피로, 번아웃 등)
-- sentiment: 전체 감정의 긍정/부정/중립 비율 (합계=1.0)
-- keywords: 핵심 감정 키워드 추출 (한국어, 최대 5개)
+특히 아래와 같은 표현이 있으면 반드시 has_negative=true 이고 severity="high" 로 설정해:
+- "죽고싶어", "죽고 싶다", "자살", "살기 싫다", "끝내고 싶다"
 
 💡 아주 중요한 규칙:
 - 반드시 "JSON만" 반환해. 설명, 말투, 다른 문장은 쓰지 마.
-- 숫자는 정수(emotions, mentalHealthSignals)와 소수(sentiment)로 정확히 구분해.
+- JSON 구조는 정확히 아래 형태만 사용해.
 
-분석할 메시지:
+{
+  "has_negative": true or false,
+  "severity": "none" or "low" or "medium" or "high",
+  "negative_terms": ["...", "..."]
+}
+
+분석할 문장:
 "$userMessage"
 ''';
 
@@ -187,51 +174,75 @@ $userMessage
     );
 
     if (response.statusCode != 200) {
-      return EmotionAnalysisResult.empty();
+      // 분석 실패 시 그냥 "없음"으로 처리
+      return NegativeAnalysisResult.empty();
     }
 
     final Map<String, dynamic> data = jsonDecode(response.body);
     final candidates = data['candidates'];
     if (candidates is! List || candidates.isEmpty) {
-      return EmotionAnalysisResult.empty();
+      return NegativeAnalysisResult.empty();
     }
 
     final content = candidates[0]['content'];
     final parts = content?['parts'];
     if (parts is! List || parts.isEmpty) {
-      return EmotionAnalysisResult.empty();
+      return NegativeAnalysisResult.empty();
     }
 
     final text = parts[0]['text'];
     if (text is! String || text.isEmpty) {
-      return EmotionAnalysisResult.empty();
+      return NegativeAnalysisResult.empty();
     }
 
-    debugPrint('[EMOTION_RAW] $text');
+    // 🔍 확인용 로그
+    debugPrint('[NEG_RAW] $text');
 
+    // text 안에는 JSON 문자열이 들어 있다고 가정하고 파싱
     try {
+      // 1) 원본 로그
+      debugPrint('[NEG_RAW] $text');
+
+      // 2) ```json 같은 코드블럭을 포함하고 있을 수 있으니 중괄호 부분만 추출
       final start = text.indexOf('{');
       final end = text.lastIndexOf('}');
       if (start == -1 || end == -1 || end <= start) {
-        debugPrint('[EMOTION_PARSE] JSON 영역을 찾지 못했습니다. text=$text');
-        return EmotionAnalysisResult.empty();
+        debugPrint('[NEG_PARSE] JSON 영역을 찾지 못했습니다. text=$text');
+        return NegativeAnalysisResult.empty();
       }
 
       final jsonString = text.substring(start, end + 1);
-      debugPrint('[EMOTION_JSON] $jsonString');
+      debugPrint('[NEG_JSON] $jsonString');
 
       final Map<String, dynamic> j = jsonDecode(jsonString);
-      final result = EmotionAnalysisResult.fromJson(j);
 
-      debugPrint('[EMOTION_ANALYSIS] input="$userMessage"');
-      debugPrint('[EMOTION_ANALYSIS] result=${result.toJson()}');
+      final hasNegative = j['has_negative'] == true;
+      final severity = (j['severity'] as String?) ?? 'none';
+      final termsRaw = j['negative_terms'];
 
-      return result;
-    } catch (e) {
-      debugPrint('[EMOTION_PARSE_ERROR] $e');
-      return EmotionAnalysisResult.empty();
+      final List<String> terms = (termsRaw is List)
+          ? termsRaw.map((e) => e.toString()).toList()
+          : <String>[];
+
+      // 👇 여기서 테스트용 로그 한 번 찍기
+      debugPrint(
+        '[NEG_ANALYSIS] input="$userMessage", '
+            'hasNegative=$hasNegative, '
+            'severity=$severity, '
+            'terms=$terms',
+      );
+
+      return NegativeAnalysisResult(
+        hasNegative: hasNegative,
+        severity: severity,
+        terms: terms,
+      );
+    } catch (_) {
+      // JSON 파싱 실패 시도 그냥 "없음"으로 처리
+      return NegativeAnalysisResult.empty();
     }
   }
+
 
   Future<void> _handleSend() async {
     final text = _textController.text.trim();
@@ -240,7 +251,7 @@ $userMessage
     _textController.clear();
 
     setState(() {
-      // 일단 분석 전이니까 emotionAnalysis는 null
+      // 일단 분석 전이니까 negative는 null
       _messages.add(
         _ChatMessage(
           text: text,
@@ -259,19 +270,27 @@ $userMessage
     });
 
     try {
-      // 1) 감정 분석
-      final analysis = await _analyzeEmotions(text);
+      // 🧠 1) 부정 단어 분석
+      final analysis = await _analyzeNegativeWords(text);
 
-      // DB 저장용 JSON 로그
-      debugPrint('[EMOTION_RESULT] ${analysis.toJson()}');
+      // 필요하면 여기서 로그/서버 전송 등
+      if (analysis.hasNegative) {
+        debugPrint('⚠️ 부정적인 표현 감지: ${analysis.terms} (severity=${analysis.severity})');
+        // TODO: DB에 저장하거나, 경고 UI, 긴급 대응 로직 등...
+      }
 
-      // 점수 계산 로그
-      debugPrint('[SCORE] 긍정 점수: ${analysis.positiveScore.toStringAsFixed(2)} (0-10)');
-      debugPrint('[SCORE] 부정 점수: ${analysis.negativeScore.toStringAsFixed(2)} (0-10)');
-      debugPrint('[SCORE] 최종 점수: ${analysis.finalScore.toStringAsFixed(2)} (0-100)');
-      // TODO: DB에 저장 - analysis.toJson(), analysis.finalScore 사용
+      // 테스트용 콘솔 로그
+      if (analysis.hasNegative) {
+        debugPrint(
+          '[NEG_RESULT] ⚠️ 부정적인 표현 감지 '
+              '(severity=${analysis.severity}, terms=${analysis.terms}) '
+              'original="$text"',
+        );
+      } else {
+        debugPrint('[NEG_RESULT] 부정적 표현 없음, original="$text"');
+      }
 
-      // 2) 실제 답변 생성
+      // 🧠 2) 실제 답변 생성
       final reply = await _callGemini(text);
 
       setState(() {
@@ -280,7 +299,7 @@ $userMessage
 
         // 제일 마지막 유저 메시지에 분석 결과를 붙여주는 패턴
         final lastUserIndex =
-            _messages.lastIndexWhere((m) => m.isUser && !m.isThinking);
+        _messages.lastIndexWhere((m) => m.isUser && !m.isThinking);
 
         if (lastUserIndex != -1) {
           final old = _messages[lastUserIndex];
@@ -289,7 +308,7 @@ $userMessage
             isUser: old.isUser,
             isThinking: old.isThinking,
             isError: old.isError,
-            emotionAnalysis: analysis,
+            negative: analysis, // 👈 여기!
           );
         }
 
@@ -319,6 +338,7 @@ $userMessage
     }
   }
 
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -346,26 +366,26 @@ $userMessage
                 final msg = _messages[index];
 
                 final align =
-                    msg.isUser ? Alignment.centerRight : Alignment.centerLeft;
+                msg.isUser ? Alignment.centerRight : Alignment.centerLeft;
 
                 final bubbleColor = msg.isUser
                     ? const Color(0xFF2563EB)
                     : (msg.isError
-                        ? const Color(0xFFFFE4E6)
-                        : Colors.white);
+                    ? const Color(0xFFFFE4E6)
+                    : Colors.white);
 
                 final textColor = msg.isUser
                     ? Colors.white
                     : (msg.isError
-                        ? const Color(0xFFB91C1C)
-                        : const Color(0xFF111827));
+                    ? const Color(0xFFB91C1C)
+                    : const Color(0xFF111827));
 
                 return Align(
                   alignment: align,
                   child: Container(
                     margin: const EdgeInsets.symmetric(vertical: 4),
                     padding:
-                        const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
                     constraints: BoxConstraints(
                       maxWidth: MediaQuery.of(context).size.width * 0.75,
                     ),
@@ -375,9 +395,9 @@ $userMessage
                         topLeft: const Radius.circular(16),
                         topRight: const Radius.circular(16),
                         bottomLeft:
-                            msg.isUser ? const Radius.circular(16) : Radius.zero,
+                        msg.isUser ? const Radius.circular(16) : Radius.zero,
                         bottomRight:
-                            msg.isUser ? Radius.zero : const Radius.circular(16),
+                        msg.isUser ? Radius.zero : const Radius.circular(16),
                       ),
                     ),
                     child: Text(
@@ -386,7 +406,7 @@ $userMessage
                         color: textColor,
                         fontSize: 14,
                         fontStyle:
-                            msg.isThinking ? FontStyle.italic : FontStyle.normal,
+                        msg.isThinking ? FontStyle.italic : FontStyle.normal,
                       ),
                     ),
                   ),
@@ -400,7 +420,7 @@ $userMessage
             top: false,
             child: Padding(
               padding:
-                  const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
+              const EdgeInsets.symmetric(horizontal: 12.0, vertical: 8.0),
               child: Row(
                 children: [
                   // 마이크 버튼 (아직 기능 없음)
@@ -474,78 +494,34 @@ class _ChatMessage {
   final bool isUser;
   final bool isThinking;
   final bool isError;
-  final EmotionAnalysisResult? emotionAnalysis;
+  final NegativeAnalysisResult? negative; // 👈 추가 (유저 메시지에만 사용)
 
   _ChatMessage({
     required this.text,
     required this.isUser,
     this.isThinking = false,
     this.isError = false,
-    this.emotionAnalysis,
+    this.negative
   });
 }
 
-class EmotionAnalysisResult {
-  final Map<String, int> emotions;
-  final Map<String, int> mentalHealthSignals;
-  final Map<String, double> sentiment;
-  final List<String> keywords;
+class NegativeAnalysisResult {
+  final bool hasNegative;
+  final String severity; // "none" | "low" | "medium" | "high"
+  final List<String> terms;
 
-  EmotionAnalysisResult({
-    required this.emotions,
-    required this.mentalHealthSignals,
-    required this.sentiment,
-    required this.keywords,
+  NegativeAnalysisResult({
+    required this.hasNegative,
+    required this.severity,
+    required this.terms,
   });
 
-  factory EmotionAnalysisResult.empty() {
-    return EmotionAnalysisResult(
-      emotions: {'joy': 0, 'sadness': 0, 'anger': 0, 'anxiety': 0, 'peace': 0},
-      mentalHealthSignals: {'depression': 0, 'anxiety': 0, 'stress': 0},
-      sentiment: {'positive': 0.0, 'negative': 0.0, 'neutral': 1.0},
-      keywords: const [],
+  factory NegativeAnalysisResult.empty() {
+    return NegativeAnalysisResult(
+      hasNegative: false,
+      severity: 'none',
+      terms: const [],
     );
-  }
-
-  factory EmotionAnalysisResult.fromJson(Map<String, dynamic> json) {
-    return EmotionAnalysisResult(
-      emotions: Map<String, int>.from(json['emotions'] ?? {}),
-      mentalHealthSignals: Map<String, int>.from(json['mentalHealthSignals'] ?? {}),
-      sentiment: Map<String, double>.from(
-        (json['sentiment'] as Map?)?.map((k, v) => MapEntry(k, (v as num).toDouble())) ?? {},
-      ),
-      keywords: List<String>.from(json['keywords'] ?? []),
-    );
-  }
-
-  Map<String, dynamic> toJson() {
-    return {
-      'emotions': emotions,
-      'mentalHealthSignals': mentalHealthSignals,
-      'sentiment': sentiment,
-      'keywords': keywords,
-    };
-  }
-
-  /// 긍정 점수 계산: (joy + peace) / 2 (0-10 범위)
-  double get positiveScore {
-    final joy = emotions['joy'] ?? 0;
-    final peace = emotions['peace'] ?? 0;
-    return (joy + peace) / 2.0;
-  }
-
-  /// 부정 점수 계산: (sadness + anger + anxiety) / 3 (0-10 범위)
-  double get negativeScore {
-    final sadness = emotions['sadness'] ?? 0;
-    final anger = emotions['anger'] ?? 0;
-    final anxiety = emotions['anxiety'] ?? 0;
-    return (sadness + anger + anxiety) / 3.0;
-  }
-
-  /// 최종 점수 계산: (긍정 점수 / (긍정 점수 + 부정 점수 + 0.01)) × 100
-  double get finalScore {
-    final pos = positiveScore;
-    final neg = negativeScore;
-    return (pos / (pos + neg + 0.01)) * 100;
   }
 }
+
