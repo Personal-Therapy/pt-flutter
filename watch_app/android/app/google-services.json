@@ -1,0 +1,29 @@
+{
+  "project_info": {
+    "project_number": "792779659550",
+    "project_id": "personaltherapy-e2bcb",
+    "storage_bucket": "personaltherapy-e2bcb.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:792779659550:android:dad46ce2e7c4fa65c1110f",
+        "android_client_info": {
+          "package_name": "com.example.personal_therapy"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyAWLeSirmR6xVS_Ljnr_v0cXtWCHI3YOFE"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

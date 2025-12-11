@@ -87,6 +87,7 @@ class HealthService {
   Future<Map<String, dynamic>> fetchRecentHealthData() async {
     try {
       final now = DateTime.now();
+      // 24시간 전 데이터부터 조회
       final startTime = now.subtract(const Duration(hours: 24));
 
       print('데이터 가져오기 시작: $startTime ~ $now');
@@ -99,13 +100,6 @@ class HealthService {
       );
 
       print('가져온 데이터 포인트 수: ${healthData.length}');
-
-      // 데이터 타입별 개수 출력
-      final typeCounts = <health.HealthDataType, int>{};
-      for (var point in healthData) {
-        typeCounts[point.type] = (typeCounts[point.type] ?? 0) + 1;
-      }
-      print('타입별 데이터 개수: $typeCounts');
 
       // 중복 제거 (Set을 사용하여 UUID 기반으로 중복 제거)
       final uniqueData = <String, health.HealthDataPoint>{};
@@ -137,14 +131,14 @@ class HealthService {
         endTime: endDate,
       );
 
-      // 중복 제거 (Set을 사용하여 UUID 기반으로 중복 제거)
+      // 중복 제거
       final uniqueHeartData = <String, health.HealthDataPoint>{};
       for (var point in heartData) {
         uniqueHeartData[point.uuid] = point;
       }
       heartData = uniqueHeartData.values.toList();
 
-      // 2시간 간격으로 데이터 그룹화
+      // [수정] 1시간 간격으로 데이터 그룹화 호출
       return _groupDataByHour(heartData, startDate);
     } catch (e) {
       print('시간별 심박 데이터 가져오기 실패: $e');
@@ -161,9 +155,46 @@ class HealthService {
     int currentHRV = 35;
     int restingHR = 65;
 
+    // [수정] 조건과 상관없이 가장 최신 데이터의 시간을 담을 변수
+    DateTime? latestRecordTime;
+
+    final Set<String> detectedDevices = {};
+
     for (var point in healthData) {
+      // 1. 기기 이름 추출 로직
+      String? deviceName;
+      String sourceName = point.sourceName;
+      String? model = point.deviceModel;
+
+      if (model != null && model.isNotEmpty) {
+        if (sourceName.isNotEmpty && sourceName != model) {
+          deviceName = '$sourceName ($model)';
+        } else {
+          deviceName = model;
+        }
+      } else {
+        deviceName = sourceName;
+      }
+
+      if (deviceName.isNotEmpty) {
+        if (deviceName.contains('com.samsung.android.app.shealth')) {
+          deviceName = 'Samsung Health (Galaxy Watch)';
+        } else if (deviceName.contains('com.google.android.apps.fitness')) {
+          deviceName = 'Google Fit';
+        }
+        detectedDevices.add(deviceName);
+      }
+
+      // 2. 값 합산 및 최신 값 추출
       final value = point.value;
       if (value is health.NumericHealthValue) {
+        // [추가] 심박수 데이터라면, 일단 가장 최신 시간을 기록 (유효성 10분 체크 전)
+        if (point.type == health.HealthDataType.HEART_RATE) {
+          if (latestRecordTime == null || point.dateTo.isAfter(latestRecordTime)) {
+            latestRecordTime = point.dateTo;
+          }
+        }
+
         switch (point.type) {
           case health.HealthDataType.STEPS:
             steps += value.numericValue.round();
@@ -172,16 +203,13 @@ class HealthService {
             activeCalories += value.numericValue;
             break;
           case health.HealthDataType.HEART_RATE:
-            // 가장 최근 심박수 사용
-            if (point.dateTo.isAfter(
-                now.subtract(const Duration(minutes: 10)))) {
+          // "현재 심박수"는 10분 이내의 최신 데이터만 반영
+            if (point.dateTo.isAfter(now.subtract(const Duration(minutes: 10)))) {
               currentHR = value.numericValue.round();
             }
             break;
           case health.HealthDataType.HEART_RATE_VARIABILITY_SDNN:
-            // 가장 최근 HRV 사용
-            if (point.dateTo.isAfter(
-                now.subtract(const Duration(minutes: 10)))) {
+            if (point.dateTo.isAfter(now.subtract(const Duration(minutes: 10)))) {
               currentHRV = value.numericValue.round();
             }
             break;
@@ -201,28 +229,31 @@ class HealthService {
       'currentHRV': currentHRV,
       'restingHR': restingHR,
       'timestamp': now,
+      // [수정] 10분 제한 없이 가장 마지막에 측정된 시간을 반환
+      'lastMeasureTime': latestRecordTime,
+      'devices': detectedDevices.toList(),
     };
   }
 
-  /// 시간별로 데이터 그룹화
+  /// 시간별로 데이터 그룹화 (1시간 단위)
   List<Map<String, dynamic>> _groupDataByHour(
       List<health.HealthDataPoint> data, DateTime startDate) {
     List<Map<String, dynamic>> hourlyData = [];
 
-    // 2시간 간격으로 데이터 그룹화
-    for (int hour = 6; hour < 22; hour += 2) {
+    // [수정] 1시간 간격으로 변경 (hour += 1) 및 0시~24시 전체 커버
+    for (int hour = 0; hour < 24; hour += 1) {
       final timeSlotStart = DateTime(
           startDate.year, startDate.month, startDate.day, hour);
-      final timeSlotEnd = timeSlotStart.add(const Duration(hours: 2));
+      // [수정] 슬롯 크기도 1시간으로 변경
+      final timeSlotEnd = timeSlotStart.add(const Duration(hours: 1));
 
       // 해당 시간대의 데이터 필터링
       final timeSlotData = data.where((point) =>
-          point.dateFrom.isAfter(timeSlotStart) &&
+      point.dateFrom.isAfter(timeSlotStart) &&
           point.dateFrom.isBefore(timeSlotEnd));
 
       if (timeSlotData.isEmpty) continue;
 
-      // 평균 계산
       int hrSum = 0;
       int hrCount = 0;
       int hrvSum = 0;
@@ -242,12 +273,14 @@ class HealthService {
         }
       }
 
-      if (hrCount > 0 && hrvCount > 0) {
+      if (hrCount > 0) {
         final avgHR = hrSum ~/ hrCount;
-        final avgHRV = hrvSum ~/ hrvCount;
+        // HRV 데이터가 없으면 기본값 사용하거나 계산에서 제외
+        final avgHRV = hrvCount > 0 ? hrvSum ~/ hrvCount : 35;
         final stress = calculateStressLevel(avgHR, avgHRV);
 
         hourlyData.add({
+          // [수정] 시간 표시 포맷 (예: 14:00)
           'time': '${hour.toString().padLeft(2, '0')}:00',
           'hr': avgHR,
           'hrv': avgHRV,
@@ -256,49 +289,36 @@ class HealthService {
       }
     }
 
+    // 시간순 정렬
+    hourlyData.sort((a, b) => (a['time'] as String).compareTo(b['time'] as String));
+
     return hourlyData;
   }
 
   /// 스트레스 레벨 계산
-  /// HR과 HRV를 기반으로 0-100 사이의 스트레스 점수 계산
   int calculateStressLevel(int heartRate, int hrv) {
-    // 정규화된 심박수 (안정시 심박수 60, 최대 100 가정)
     double normalizedHR = ((heartRate - 60) / 40).clamp(0.0, 1.0);
-
-    // 정규화된 HRV (높을수록 좋음, 20-80 범위 가정)
     double normalizedHRV = (1 - ((hrv - 20) / 60).clamp(0.0, 1.0));
-
-    // 가중 평균으로 스트레스 점수 계산
-    // HR 60%, HRV 40% 가중치
     double stressScore = (normalizedHR * 0.6 + normalizedHRV * 0.4) * 100;
-
     return stressScore.round().clamp(0, 100);
   }
 
   /// 사용자 상태 분석
   Map<String, dynamic> analyzeUserState(int heartRate, int hrv, int restingHR) {
     final stressLevel = calculateStressLevel(heartRate, hrv);
-
     String state;
     String recommendation;
 
-    // HR이 안정시보다 20% 이상 높고, HRV가 낮은 경우
     if (heartRate > restingHR * 1.2 && hrv < 30) {
       state = '높은 스트레스';
       recommendation = '심호흡이나 명상으로 긴장을 풀어보세요. 잠시 휴식이 필요합니다.';
-    }
-    // HR이 안정시보다 10-20% 높거나 HRV가 중간인 경우
-    else if (heartRate > restingHR * 1.1 || hrv < 40) {
+    } else if (heartRate > restingHR * 1.1 || hrv < 40) {
       state = '약간 긴장';
       recommendation = '가볍게 스트레칭을 하거나 잠깐 산책해보세요.';
-    }
-    // HRV가 높고 HR이 안정적인 경우
-    else if (hrv > 50 && heartRate < restingHR * 1.1) {
+    } else if (hrv > 50 && heartRate < restingHR * 1.1) {
       state = '편안함';
       recommendation = '좋은 컨디션입니다! 현재 상태를 유지하세요.';
-    }
-    // 그 외
-    else {
+    } else {
       state = '보통';
       recommendation = '평온한 상태입니다. 꾸준한 활동을 유지하세요.';
     }
@@ -310,7 +330,7 @@ class HealthService {
     };
   }
 
-  /// 기본 데이터 반환 (권한 없거나 데이터 없을 때)
+  /// 기본 데이터 반환
   Map<String, dynamic> _getDefaultHealthData() {
     return {
       'steps': 0,
@@ -319,10 +339,11 @@ class HealthService {
       'currentHRV': 35,
       'restingHR': 65,
       'timestamp': DateTime.now(),
+      'devices': <String>[],
     };
   }
 
-  /// Firestore에 건강 데이터 저장
+  /// Firestore 저장
   Future<void> saveHealthDataToFirestore(
       String userId, Map<String, dynamic> healthData) async {
     try {
@@ -339,13 +360,12 @@ class HealthService {
     }
   }
 
-  /// Firestore에서 오늘의 건강 데이터 가져오기
+  /// Firestore 데이터 가져오기
   Future<List<Map<String, dynamic>>> getTodayHealthDataFromFirestore(
       String userId) async {
     try {
       final now = DateTime.now();
       final startOfDay = DateTime(now.year, now.month, now.day);
-
       final snapshot = await FirebaseFirestore.instance
           .collection('users')
           .doc(userId)
@@ -353,7 +373,6 @@ class HealthService {
           .where('timestamp', isGreaterThanOrEqualTo: startOfDay)
           .orderBy('timestamp', descending: false)
           .get();
-
       return snapshot.docs
           .map((doc) => doc.data() as Map<String, dynamic>)
           .toList();
