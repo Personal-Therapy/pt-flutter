@@ -27,11 +27,17 @@ android {
         applicationId = "com.project.personaltherapy"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = 26
+        minSdk = 29
         targetSdk = flutter.targetSdkVersion
         versionCode = flutter.versionCode
         versionName = flutter.versionName
         multiDexEnabled = true
+
+        // 16KB 페이지 사이즈 지원
+        ndk {
+            //noinspection ChromeOsAbiSupport
+            abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86", "x86_64")
+        }
     }
 
     buildTypes {
@@ -49,4 +55,13 @@ flutter {
 
 dependencies {
     implementation("androidx.health.connect:connect-client:1.2.0-alpha02")
+
+    // Samsung Health Data SDK (로컬 AAR 파일)
+    implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar"))))
+
+    // Gson 의존성 (Samsung Health SDK 필수)
+    implementation("com.google.code.gson:gson:2.10.1")
+
+    // Google Play Services Tasks API
+    implementation("com.google.android.gms:play-services-tasks:18.2.0")
 }

@@ -1,20 +1,41 @@
 import 'dart:io';
 import 'package:health/health.dart' as health;
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:flutter/services.dart';
 
-/// Apple Health / Health Connect 데이터를 관리하는 서비스
+/// Apple Health / Health Connect / Samsung Health 데이터를 관리하는 서비스
 class HealthService {
   final health.Health _healthFactory = health.Health();
+  static const MethodChannel _samsungHealthChannel =
+      MethodChannel('com.project.personaltherapy/samsung_health');
+  bool _samsungHealthAvailable = false;
+  bool _samsungHealthInitialized = false;
 
-  // 가져올 데이터 타입 정의
+  // 가져올 데이터 타입 정의 (Galaxy Watch 5 + Samsung Health 지원)
   static final List<health.HealthDataType> _dataTypes = [
+    // 기본 활동 데이터
     health.HealthDataType.STEPS,
     health.HealthDataType.ACTIVE_ENERGY_BURNED,
+    health.HealthDataType.DISTANCE_DELTA,
+
+    // 심장 건강 데이터
     health.HealthDataType.HEART_RATE,
     health.HealthDataType.RESTING_HEART_RATE,
-    // HRV 타입들 (Health Connect RMSSD 지원 테스트)
-    health.HealthDataType.HEART_RATE_VARIABILITY_RMSSD, // 🆕 Health Connect 테스트
-    // health.HealthDataType.HEART_RATE_VARIABILITY_SDNN, // Health Connect 미지원 확인됨
+    health.HealthDataType.HEART_RATE_VARIABILITY_RMSSD,
+
+    // 수면 및 회복
+    health.HealthDataType.SLEEP_ASLEEP,
+    health.HealthDataType.SLEEP_AWAKE,
+    health.HealthDataType.SLEEP_SESSION,
+
+    // 혈중 산소 포화도
+    health.HealthDataType.BLOOD_OXYGEN,
+
+    // 운동 데이터
+    health.HealthDataType.WORKOUT,
+
+    // 수분 섭취
+    health.HealthDataType.WATER,
   ];
 
   /// Health Connect가 사용 가능한지 확인 (Android만 해당)
@@ -29,6 +50,141 @@ class HealthService {
     }
   }
 
+  /// Health Connect 권한 재요청 (네이티브 SDK 직접 사용)
+  /// Flutter health 패키지를 우회하여 모든 권한을 요청합니다.
+  Future<void> reopenHealthConnectPermissions() async {
+    try {
+      if (Platform.isAndroid) {
+        // 네이티브 메서드로 Health Connect 권한 직접 요청
+        await _samsungHealthChannel.invokeMethod('requestHealthConnectPermissions');
+        print('✅ Health Connect 네이티브 권한 요청 완료');
+      }
+    } catch (e) {
+      print('❌ Health Connect 네이티브 권한 요청 실패: $e');
+      // 실패 시 기존 방식으로 폴백
+      try {
+        await requestAuthorization();
+        print('Health Connect 권한 재요청 완료 (폴백)');
+      } catch (e2) {
+        print('Health Connect 권한 재요청 실패: $e2');
+      }
+    }
+  }
+
+  /// Health Connect에서 안정시 심박수 데이터 가져오기 (네이티브)
+  Future<List<Map<String, dynamic>>> getRestingHeartRateNative(
+      DateTime startTime, DateTime endTime) async {
+    if (!Platform.isAndroid) {
+      return [];
+    }
+
+    try {
+      final result = await _samsungHealthChannel.invokeMethod('getRestingHeartRate', {
+        'startTime': startTime.millisecondsSinceEpoch,
+        'endTime': endTime.millisecondsSinceEpoch,
+      });
+
+      if (result is List) {
+        return result.cast<Map<String, dynamic>>();
+      }
+      return [];
+    } catch (e) {
+      print('❌ 안정시 심박수 데이터 가져오기 실패: $e');
+      return [];
+    }
+  }
+
+  /// Health Connect에서 HRV 데이터 가져오기 (네이티브)
+  Future<List<Map<String, dynamic>>> getHeartRateVariabilityNative(
+      DateTime startTime, DateTime endTime) async {
+    if (!Platform.isAndroid) {
+      return [];
+    }
+
+    try {
+      final result = await _samsungHealthChannel.invokeMethod('getHeartRateVariability', {
+        'startTime': startTime.millisecondsSinceEpoch,
+        'endTime': endTime.millisecondsSinceEpoch,
+      });
+
+      if (result is List) {
+        return result.cast<Map<String, dynamic>>();
+      }
+      return [];
+    } catch (e) {
+      print('❌ HRV 데이터 가져오기 실패: $e');
+      return [];
+    }
+  }
+
+  /// Samsung Health SDK가 사용 가능한지 확인
+  Future<bool> checkSamsungHealthAvailable() async {
+    if (!Platform.isAndroid) {
+      return false;
+    }
+
+    try {
+      final bool? available = await _samsungHealthChannel.invokeMethod('checkSamsungHealthAvailable');
+      _samsungHealthAvailable = available ?? false;
+      print('Samsung Health 사용 가능 여부: $_samsungHealthAvailable');
+      return _samsungHealthAvailable;
+    } catch (e) {
+      print('Samsung Health 확인 실패: $e');
+      _samsungHealthAvailable = false;
+      return false;
+    }
+  }
+
+  /// Samsung Health SDK 초기화
+  Future<bool> initializeSamsungHealth() async {
+    if (!Platform.isAndroid || !_samsungHealthAvailable) {
+      return false;
+    }
+
+    try {
+      final bool? initialized = await _samsungHealthChannel.invokeMethod('initializeSamsungHealth');
+      _samsungHealthInitialized = initialized ?? false;
+      print('Samsung Health 초기화: $_samsungHealthInitialized');
+      return _samsungHealthInitialized;
+    } catch (e) {
+      print('Samsung Health 초기화 실패: $e');
+      _samsungHealthInitialized = false;
+      return false;
+    }
+  }
+
+  /// Samsung Health에서 심박수 데이터 가져오기
+  Future<List<Map<String, dynamic>>> getSamsungHealthHeartRate({
+    required DateTime startTime,
+    required DateTime endTime,
+  }) async {
+    if (!_samsungHealthInitialized) {
+      print('Samsung Health가 초기화되지 않음');
+      return [];
+    }
+
+    try {
+      final result = await _samsungHealthChannel.invokeMethod('getHeartRateData', {
+        'startTime': startTime.millisecondsSinceEpoch,
+        'endTime': endTime.millisecondsSinceEpoch,
+      });
+
+      if (result is List) {
+        return result.cast<Map<dynamic, dynamic>>().map((item) {
+          return {
+            'heartRate': item['heartRate'] as num,
+            'timestamp': item['timestamp'] as num,
+          };
+        }).toList();
+      }
+
+      return [];
+    } catch (e) {
+      print('Samsung Health 심박수 데이터 가져오기 실패: $e');
+      return [];
+    }
+  }
+
   /// Health 권한 요청
   /// Health Connect (Android) 또는 Apple Health (iOS)
   Future<bool> requestAuthorization() async {
@@ -38,6 +194,7 @@ class HealthService {
           .map((type) => health.HealthDataAccess.READ)
           .toList();
 
+      print('📱 Galaxy Watch 5 + Samsung Health 데이터 연동 시작');
       print('요청할 데이터 타입 개수: ${_dataTypes.length}');
       print('요청할 권한: $_dataTypes');
 
@@ -50,12 +207,16 @@ class HealthService {
       print('권한 요청 응답: $requested');
 
       if (!requested) {
-        print('Health 권한 요청 거부됨');
+        print('❌ Health 권한 요청이 거부되었습니다.');
+        print('💡 Health Connect 앱에서 Samsung Health를 데이터 소스로 연결하세요.');
         return false;
       }
 
-      // 각 데이터 타입별로 권한 확인 (일부만 허용되어도 OK)
+      // 각 데이터 타입별로 권한 확인
       int grantedCount = 0;
+      List<String> granted = [];
+      List<String> denied = [];
+
       for (var dataType in _dataTypes) {
         bool? hasPermission = await _healthFactory.hasPermissions(
           [dataType],
@@ -64,24 +225,32 @@ class HealthService {
 
         if (hasPermission == true) {
           grantedCount++;
-          print('$dataType: 권한 허용됨');
+          granted.add(dataType.name);
+          print('✅ $dataType: 권한 허용됨');
         } else {
-          print('$dataType: 권한 거부됨 또는 미지원');
+          denied.add(dataType.name);
+          print('⚠️ $dataType: 권한 거부됨 또는 미지원');
         }
       }
 
+      print('\n📊 권한 요청 결과:');
       print('전체 ${_dataTypes.length}개 중 $grantedCount개 권한 허용됨');
+      print('✅ 허용된 권한 ($grantedCount개): ${granted.join(", ")}');
+      if (denied.isNotEmpty) {
+        print('⚠️ 거부/미지원 권한 (${denied.length}개): ${denied.join(", ")}');
+        print('💡 Health Connect 앱에서 Samsung Health를 확인하고 추가 권한을 부여하세요.');
+      }
 
       // 최소 1개 이상의 권한이 허용되면 성공으로 간주
       if (grantedCount > 0) {
-        print('Health 권한이 성공적으로 부여됨 ($grantedCount/${_dataTypes.length})');
+        print('✅ Health 권한이 성공적으로 부여됨 ($grantedCount/${_dataTypes.length})');
         return true;
       } else {
-        print('Health 권한이 부여되지 않음. Health Connect 앱에서 권한을 확인하세요.');
+        print('❌ Health 권한이 부여되지 않음. Health Connect 앱에서 권한을 확인하세요.');
         return false;
       }
     } catch (e) {
-      print('Health 권한 요청 실패: $e');
+      print('❌ Health 권한 요청 실패: $e');
       return false;
     }
   }
@@ -160,19 +329,67 @@ class HealthService {
     }
   }
 
-  /// 특정 시간 범위의 평균 심박수 가져오기
+  /// 특정 시간 범위의 평균 심박수 가져오기 (3단계 폴백)
+  /// 1단계: Health Connect
+  /// 2단계: Samsung Health SDK
+  /// 3단계: 심박수 기반 HRV 추정
   Future<Map<String, dynamic>> fetchAverageHeartData({
     required DateTime startTime,
     required DateTime endTime,
   }) async {
     try {
-      // 심박수 데이터 가져오기
+      // 🔵 1단계: Health Connect에서 데이터 가져오기
       List<health.HealthDataPoint> heartData = await _healthFactory
           .getHealthDataFromTypes(
         types: [health.HealthDataType.HEART_RATE],
         startTime: startTime,
         endTime: endTime,
       );
+
+      // Health Connect에 데이터가 없으면 Samsung Health 시도
+      if (heartData.isEmpty && Platform.isAndroid) {
+        print('🟡 Health Connect에 데이터 없음, Samsung Health 시도...');
+
+        // 🟠 2단계: Samsung Health SDK에서 데이터 가져오기
+        if (!_samsungHealthAvailable) {
+          await checkSamsungHealthAvailable();
+        }
+
+        if (_samsungHealthAvailable && !_samsungHealthInitialized) {
+          await initializeSamsungHealth();
+        }
+
+        if (_samsungHealthInitialized) {
+          final samsungHeartData = await getSamsungHealthHeartRate(
+            startTime: startTime,
+            endTime: endTime,
+          );
+
+          if (samsungHeartData.isNotEmpty) {
+            // Samsung Health 데이터로 평균 계산
+            int totalHR = 0;
+            for (var data in samsungHeartData) {
+              totalHR += (data['heartRate'] as num).round();
+            }
+
+            final avgHR = (totalHR / samsungHeartData.length).round();
+            final avgHRV = estimateHRVFromHeartRate(avgHR, null);
+
+            print('✅ Samsung Health에서 데이터 획득: 평균 심박수 $avgHR, HRV $avgHRV (추정) (${samsungHeartData.length}개 데이터)');
+
+            return {
+              'avgHR': avgHR,
+              'avgHRV': avgHRV,
+              'count': samsungHeartData.length,
+              'source': 'samsung_health',
+            };
+          }
+        }
+
+        // Samsung Health도 실패한 경우
+        print('⚠️ Samsung Health에서도 데이터 없음');
+        return {'avgHR': null, 'avgHRV': null, 'count': 0};
+      }
 
       if (heartData.isEmpty) {
         print('시간대 ${startTime.hour}:00-${endTime.hour}:00 데이터 없음');
@@ -200,18 +417,61 @@ class HealthService {
 
       final avgHR = count > 0 ? (totalHR / count).round() : null;
 
-      // HRV 추정 (심박수 기반)
+      // 🟢 3단계: 심박수 기반 HRV 추정 (항상 실행)
       final avgHRV = avgHR != null ? estimateHRVFromHeartRate(avgHR, null) : 35;
 
-      print('시간대 ${startTime.hour}:00-${endTime.hour}:00: 평균 심박수 $avgHR, HRV $avgHRV (추정) (${count}개 데이터)');
+      print('✅ Health Connect에서 데이터 획득: 평균 심박수 $avgHR, HRV $avgHRV (추정) (${count}개 데이터)');
 
       return {
         'avgHR': avgHR,
-        'avgHRV': avgHRV, // 심박수 기반 HRV 추정 🆕
+        'avgHRV': avgHRV,
         'count': count,
+        'source': 'health_connect',
       };
     } catch (e) {
-      print('평균 심박 데이터 가져오기 실패: $e');
+      print('❌ 평균 심박 데이터 가져오기 실패: $e');
+
+      // 🟠 2단계: Samsung Health SDK 시도
+      if (Platform.isAndroid) {
+        try {
+          if (!_samsungHealthAvailable) {
+            await checkSamsungHealthAvailable();
+          }
+
+          if (_samsungHealthAvailable && !_samsungHealthInitialized) {
+            await initializeSamsungHealth();
+          }
+
+          if (_samsungHealthInitialized) {
+            final samsungHeartData = await getSamsungHealthHeartRate(
+              startTime: startTime,
+              endTime: endTime,
+            );
+
+            if (samsungHeartData.isNotEmpty) {
+              int totalHR = 0;
+              for (var data in samsungHeartData) {
+                totalHR += (data['heartRate'] as num).round();
+              }
+
+              final avgHR = (totalHR / samsungHeartData.length).round();
+              final avgHRV = estimateHRVFromHeartRate(avgHR, null);
+
+              print('✅ Samsung Health 폴백 성공: 평균 심박수 $avgHR, HRV $avgHRV (${samsungHeartData.length}개 데이터)');
+
+              return {
+                'avgHR': avgHR,
+                'avgHRV': avgHRV,
+                'count': samsungHeartData.length,
+                'source': 'samsung_health_fallback',
+              };
+            }
+          }
+        } catch (samsungError) {
+          print('❌ Samsung Health 폴백 실패: $samsungError');
+        }
+      }
+
       return {'avgHR': null, 'avgHRV': null, 'count': 0};
     }
   }
