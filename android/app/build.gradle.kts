@@ -54,7 +54,7 @@ flutter {
 }
 
 dependencies {
-    implementation("androidx.health.connect:connect-client:1.2.0-alpha02")
+    implementation("androidx.health.connect:connect-client:1.1.0-alpha11")
 
     // Samsung Health Data SDK (로컬 AAR 파일)
     implementation(fileTree(mapOf("dir" to "libs", "include" to listOf("*.aar"))))

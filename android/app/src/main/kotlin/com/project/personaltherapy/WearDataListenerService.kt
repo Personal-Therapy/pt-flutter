@@ -52,7 +52,8 @@ class WearDataListenerService : WearableListenerService() {
                     time = Instant.ofEpochMilli(timestamp),
                     zoneOffset = ZoneOffset.systemDefault().rules.getOffset(Instant.now()),
                     heartRateVariabilityMillis = rmssd,
-                    // metadata = Metadata(...) // 필요시 메타데이터 추가
+                    // ✅ 정답: 생성자 대신 manualEntry() 사용
+                    metadata = androidx.health.connect.client.records.metadata.Metadata.manualEntry()
                 )
 
                 // 2. 헬스 커넥트에 쓰기 (Insert)

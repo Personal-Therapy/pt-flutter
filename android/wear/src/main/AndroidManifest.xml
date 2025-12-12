@@ -1,10 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.project.personaltherapy.wear"> <uses-feature android:name="android.hardware.type.watch" />
 
-    <!-- Wear OS 필수 기능 -->
-    <uses-feature android:name="android.hardware.type.watch" />
-
-    <!-- 권한 -->
     <uses-permission android:name="android.permission.BODY_SENSORS" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     <uses-permission android:name="android.permission.FOREGROUND_SERVICE_HEALTH" />
@@ -13,12 +10,10 @@
 
     <application
         android:allowBackup="true"
-        android:icon="@android:drawable/ic_dialog_info"
-        android:label="PT Watch"
+        android:icon="@android:drawable/sym_def_app_icon"  android:label="PT Watch"
         android:supportsRtl="true"
         android:theme="@android:style/Theme.DeviceDefault">
 
-        <!-- MainActivity -->
         <activity
             android:name=".MainActivity"
             android:exported="true"
@@ -29,22 +24,21 @@
             </intent-filter>
         </activity>
 
-        <!-- Sensor Test Activity -->
         <activity
             android:name=".SensorTestActivity"
             android:exported="false"
             android:label="Sensor Test" />
 
-        <!-- HRV 측정 포그라운드 서비스 -->
         <service
             android:name=".HrvMonitorService"
-            android:foregroundServiceType="health"
-            android:exported="false" />
+            android:enabled="true"
+            android:exported="true"
+            android:foregroundServiceType="health|dataSync" />
 
-        <!-- Wearable Data Layer 지원 (폰 앱과 통신) -->
         <meta-data
             android:name="com.google.android.wearable.standalone"
-            android:value="false" />
+            android:value="true" />
+
     </application>
 
 </manifest>
