@@ -1036,6 +1036,48 @@ class _WearableDeviceScreenState extends State<WearableDeviceScreen> {
             title: '개인정보 보호',
             subtitle: '모든 건강 데이터는 기기에서 안전하게 처리됩니다.',
           ),
+          // Android인 경우 Health Connect 권한 재요청 버튼 추가
+          if (Platform.isAndroid) ...[
+            const SizedBox(height: 20),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                onPressed: () async {
+                  await _healthService.reopenHealthConnectPermissions();
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Health Connect 권한 화면에서 추가 권한을 부여하세요.'),
+                        duration: Duration(seconds: 3),
+                      ),
+                    );
+                  }
+                },
+                icon: const Icon(Icons.health_and_safety, size: 20),
+                label: const Text(
+                  'Health Connect 권한 다시 요청',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w500),
+                ),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: kColorBtnPrimary,
+                  foregroundColor: Colors.white,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(12),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              '💡 Samsung Health를 Health Connect에 연결하고 추가 권한을 부여하면 더 많은 건강 데이터를 받아올 수 있습니다.\n\n📱 Health Connect 앱을 열고 "앱 권한" → "Personal Therapy"에서 권한을 확인하세요.',
+              style: TextStyle(
+                fontSize: 13,
+                color: kColorTextSubtitle,
+                height: 1.4,
+              ),
+            ),
+          ],
         ],
       ),
     );
