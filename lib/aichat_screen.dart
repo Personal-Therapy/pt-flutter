@@ -2,6 +2,8 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:untitled/services/firestore_service.dart';
 
 // Gemini API 엔드포인트
 const String geminiEndpoint =
@@ -281,14 +283,18 @@ $userMessage
       // 점수 계산 로그
       debugPrint('[SCORE] 긍정 점수: ${analysis.positiveScore.toStringAsFixed(2)} (0-10)');
       debugPrint('[SCORE] 부정 점수: ${analysis.negativeScore.toStringAsFixed(2)} (0-10)');
-      debugPrint('');
-      debugPrint('=== 점수 비교 ===');
-      debugPrint('[A-1 방식] emotions 비율: ${analysis.finalScoreA1.toStringAsFixed(2)}점');
-      debugPrint('[B-3 방식] sentiment 정규화: ${analysis.finalScoreB3.toStringAsFixed(2)}점');
-      debugPrint('[차이] ${(analysis.finalScoreA1 - analysis.finalScoreB3).abs().toStringAsFixed(2)}점');
-      debugPrint('================');
+      debugPrint('[SCORE] 최종 점수: ${analysis.finalScoreB3.round()} / 100');
 
-      // TODO: DB에 저장 - analysis.toJson(), analysis.finalScoreA1, analysis.finalScoreB3 사용
+      // Firestore에 B-3 방식 점수 저장
+      final userId = FirebaseAuth.instance.currentUser?.uid;
+      if (userId != null) {
+        final firestoreService = FirestoreService();
+        await firestoreService.updateDailyMentalStatus(
+          uid: userId,
+          aiConversationScore: analysis.finalScoreB3.round(),
+        );
+        debugPrint('[AI_CHAT] Firestore 저장 완료! 점수: ${analysis.finalScoreB3.round()}');
+      }
 
       setState(() {
         // "생각 중" 버블 제거
