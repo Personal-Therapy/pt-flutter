@@ -3,8 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:http/http.dart' as http;
 
-final String geminiApiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
-// 네가 Java에서 쓰던 것과 같은 엔드포인트 구조
+// Gemini API 엔드포인트
 const String geminiEndpoint =
     'https://generativelanguage.googleapis.com/v1beta/models/gemini-2.5-flash:generateContent';
 
@@ -39,11 +38,34 @@ class _AIChatScreenState extends State<AIChatScreen> {
 
   /// ✅ MyApplication의 requestGeminiResponse()를 Dart로 옮긴 버전
   Future<String> _callGemini(String userMessage) async {
-    if (geminiApiKey.isEmpty) {
+    final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
+    if (apiKey.isEmpty) {
       throw Exception('Gemini API 키가 설정되어 있지 않습니다.');
     }
 
-    final uri = Uri.parse('$geminiEndpoint?key=$geminiApiKey');
+    final uri = Uri.parse('$geminiEndpoint?key=$apiKey');
+
+    // 🧠 상담사 역할 + 스타일을 명시하는 프롬프트
+    final counselorPrompt = '''
+너는 마음을 돌보는 온라인 상담 챗봇이야.
+
+[역할]
+- 따뜻하고 공감적인 톤으로 대답해.
+- 현실적인 조언도 주되, "공감 : 조언" 비율을 6:4 정도로 유지해.
+- 사용자의 감정을 먼저 알아주고(공감), 그 다음에 짧게 제안해줘.
+
+[말투]
+- 존댓말을 쓰되, 너무 딱딱하지 않고 부드러운 대화체로 말해.
+- 한 번에 3~5문장 안쪽으로만 답해. 너무 길게 설명하지 마.
+- 해결책은 한두 가지 정도만 제안하고, 선택은 사용자에게 맡겨.
+
+[주의]
+- 의사나 심리상담사를 대신하는 존재처럼 진단하지는 말고,
+  필요해 보이면 "믿을 수 있는 주변 사람이나 전문가에게 도움을 요청해보는 것도 좋겠다" 정도로만 권유해.
+
+[사용자 메시지]
+$userMessage
+''';
 
     // Java에서 만든 requestBody:
     // { "contents": [{ "parts": [{ "text": "..." }] }] }
@@ -51,7 +73,7 @@ class _AIChatScreenState extends State<AIChatScreen> {
       'contents': [
         {
           'parts': [
-            {'text': userMessage}
+            {'text': counselorPrompt}
           ]
         }
       ]
@@ -96,6 +118,128 @@ class _AIChatScreenState extends State<AIChatScreen> {
     return text;
   }
 
+  /// 🧠 유저 메시지에서 감정 분석을 수행하는 함수
+  Future<EmotionAnalysisResult> _analyzeEmotions(String userMessage) async {
+    final apiKey = dotenv.env['GEMINI_API_KEY'] ?? '';
+    if (apiKey.isEmpty) {
+      return EmotionAnalysisResult.empty();
+    }
+
+    final uri = Uri.parse('$geminiEndpoint?key=$apiKey');
+
+    final prompt = '''
+너는 한국어 심리상담 전문 분석가야.
+
+사용자 메시지를 분석하여 다음 JSON 형식으로만 응답해:
+{
+  "emotions": {
+    "joy": 0-10,
+    "sadness": 0-10,
+    "anger": 0-10,
+    "anxiety": 0-10,
+    "peace": 0-10
+  },
+  "mentalHealthSignals": {
+    "depression": 0-10,
+    "anxiety": 0-10,
+    "stress": 0-10
+  },
+  "sentiment": {
+    "positive": 0.0-1.0,
+    "negative": 0.0-1.0,
+    "neutral": 0.0-1.0
+  },
+  "keywords": ["키워드1", "키워드2", ...]
+}
+
+[분석 기준]
+- emotions: 각 감정의 강도 (0=없음, 10=매우 강함)
+  - joy: 기쁨, 행복, 즐거움
+  - sadness: 슬픔, 우울함, 허무함 
+  - anger: 분노, 짜증, 억울함
+  - anxiety: 불안, 걱정, 두려움
+  - peace: 평온, 안정, 편안함
+- mentalHealthSignals: 정신건강 관련 신호 강도 (0=없음, 10=매우 심각)
+  - depression: 우울증 관련 신호 (무기력, 흥미상실, 자책 등)
+  - anxiety: 불안장애 관련 신호 (과도한 걱정, 공황 등)
+  - stress: 스트레스 관련 신호 (압박감, 피로, 번아웃 등)
+- sentiment: 전체 감정의 긍정/부정/중립 비율 (합계=1.0)
+- keywords: 핵심 감정 키워드 추출 (한국어, 최대 5개)
+
+💡 아주 중요한 규칙:
+- 반드시 "JSON만" 반환해. 설명, 말투, 다른 문장은 쓰지 마.
+- 숫자는 정수(emotions, mentalHealthSignals)와 소수(sentiment)로 정확히 구분해.
+
+분석할 메시지:
+"$userMessage"
+''';
+
+    final requestBody = {
+      'contents': [
+        {
+          'parts': [
+            {'text': prompt}
+          ]
+        }
+      ]
+    };
+
+    final response = await http.post(
+      uri,
+      headers: const {
+        'Content-Type': 'application/json; charset=utf-8',
+      },
+      body: jsonEncode(requestBody),
+    );
+
+    if (response.statusCode != 200) {
+      return EmotionAnalysisResult.empty();
+    }
+
+    final Map<String, dynamic> data = jsonDecode(response.body);
+    final candidates = data['candidates'];
+    if (candidates is! List || candidates.isEmpty) {
+      return EmotionAnalysisResult.empty();
+    }
+
+    final content = candidates[0]['content'];
+    final parts = content?['parts'];
+    if (parts is! List || parts.isEmpty) {
+      return EmotionAnalysisResult.empty();
+    }
+
+    final text = parts[0]['text'];
+    if (text is! String || text.isEmpty) {
+      return EmotionAnalysisResult.empty();
+    }
+
+    debugPrint('[EMOTION_RAW] $text');
+
+    try {
+      final start = text.indexOf('{');
+      final end = text.lastIndexOf('}');
+      if (start == -1 || end == -1 || end <= start) {
+        debugPrint('[EMOTION_PARSE] JSON 영역을 찾지 못했습니다. text=$text');
+        return EmotionAnalysisResult.empty();
+      }
+
+      final jsonString = text.substring(start, end + 1);
+      debugPrint('[EMOTION_JSON] $jsonString');
+
+      final Map<String, dynamic> j = jsonDecode(jsonString);
+      final result = EmotionAnalysisResult.fromJson(j);
+
+      debugPrint('[EMOTION_ANALYSIS] input="$userMessage"');
+      debugPrint('[EMOTION_ANALYSIS] result=${result.toJson()}');
+
+      return result;
+    } catch (e) {
+      debugPrint('[EMOTION_PARSE_ERROR] $e');
+      return EmotionAnalysisResult.empty();
+    }
+  }
+
+
   Future<void> _handleSend() async {
     final text = _textController.text.trim();
     if (text.isEmpty || _isSending) return;
@@ -103,7 +247,7 @@ class _AIChatScreenState extends State<AIChatScreen> {
     _textController.clear();
 
     setState(() {
-      // 1) 내 메시지 추가
+      // 일단 분석 전이니까 emotionAnalysis는 null
       _messages.add(
         _ChatMessage(
           text: text,
@@ -111,7 +255,6 @@ class _AIChatScreenState extends State<AIChatScreen> {
         ),
       );
 
-      // 2) Gemini 생각 중… 표시
       _isSending = true;
       _messages.add(
         _ChatMessage(
@@ -123,11 +266,49 @@ class _AIChatScreenState extends State<AIChatScreen> {
     });
 
     try {
-      final reply = await _callGemini(text);
+      // 🧠 감정 분석 + 답변 생성 병렬 실행
+      final results = await Future.wait([
+        _analyzeEmotions(text),
+        _callGemini(text),
+      ]);
+
+      final analysis = results[0] as EmotionAnalysisResult;
+      final reply = results[1] as String;
+
+      // DB 저장용 JSON 로그
+      debugPrint('[EMOTION_RESULT] ${analysis.toJson()}');
+
+      // 점수 계산 로그
+      debugPrint('[SCORE] 긍정 점수: ${analysis.positiveScore.toStringAsFixed(2)} (0-10)');
+      debugPrint('[SCORE] 부정 점수: ${analysis.negativeScore.toStringAsFixed(2)} (0-10)');
+      debugPrint('');
+      debugPrint('=== 점수 비교 ===');
+      debugPrint('[A-1 방식] emotions 비율: ${analysis.finalScoreA1.toStringAsFixed(2)}점');
+      debugPrint('[B-3 방식] sentiment 정규화: ${analysis.finalScoreB3.toStringAsFixed(2)}점');
+      debugPrint('[차이] ${(analysis.finalScoreA1 - analysis.finalScoreB3).abs().toStringAsFixed(2)}점');
+      debugPrint('================');
+
+      // TODO: DB에 저장 - analysis.toJson(), analysis.finalScoreA1, analysis.finalScoreB3 사용
 
       setState(() {
         // "생각 중" 버블 제거
         _messages.removeWhere((m) => m.isThinking);
+
+        // 제일 마지막 유저 메시지에 분석 결과를 붙여주는 패턴
+        final lastUserIndex =
+        _messages.lastIndexWhere((m) => m.isUser && !m.isThinking);
+
+        if (lastUserIndex != -1) {
+          final old = _messages[lastUserIndex];
+          _messages[lastUserIndex] = _ChatMessage(
+            text: old.text,
+            isUser: old.isUser,
+            isThinking: old.isThinking,
+            isError: old.isError,
+            emotionAnalysis: analysis, // 👈 감정 분석 결과
+          );
+        }
+
         // 실제 Gemini 응답 추가
         _messages.add(
           _ChatMessage(
@@ -153,6 +334,7 @@ class _AIChatScreenState extends State<AIChatScreen> {
       });
     }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -309,11 +491,91 @@ class _ChatMessage {
   final bool isUser;
   final bool isThinking;
   final bool isError;
+  final EmotionAnalysisResult? emotionAnalysis; // 👈 감정 분석 결과 (유저 메시지에만 사용)
 
   _ChatMessage({
     required this.text,
     required this.isUser,
     this.isThinking = false,
     this.isError = false,
+    this.emotionAnalysis,
   });
+}
+
+class EmotionAnalysisResult {
+  final Map<String, int> emotions;           // joy, sadness, anger, anxiety, peace (0-10)
+  final Map<String, int> mentalHealthSignals; // depression, anxiety, stress (0-10)
+  final Map<String, double> sentiment;       // positive, negative, neutral (비율)
+  final List<String> keywords;               // 감정 키워드 목록
+
+  EmotionAnalysisResult({
+    required this.emotions,
+    required this.mentalHealthSignals,
+    required this.sentiment,
+    required this.keywords,
+  });
+
+  factory EmotionAnalysisResult.empty() {
+    return EmotionAnalysisResult(
+      emotions: {'joy': 0, 'sadness': 0, 'anger': 0, 'anxiety': 0, 'peace': 0},
+      mentalHealthSignals: {'depression': 0, 'anxiety': 0, 'stress': 0},
+      sentiment: {'positive': 0.0, 'negative': 0.0, 'neutral': 1.0},
+      keywords: const [],
+    );
+  }
+
+  factory EmotionAnalysisResult.fromJson(Map<String, dynamic> json) {
+    return EmotionAnalysisResult(
+      emotions: Map<String, int>.from(json['emotions'] ?? {}),
+      mentalHealthSignals: Map<String, int>.from(json['mentalHealthSignals'] ?? {}),
+      sentiment: Map<String, double>.from(
+        (json['sentiment'] as Map?)?.map((k, v) => MapEntry(k, (v as num).toDouble())) ?? {},
+      ),
+      keywords: List<String>.from(json['keywords'] ?? []),
+    );
+  }
+
+  Map<String, dynamic> toJson() {
+    return {
+      'emotions': emotions,
+      'mentalHealthSignals': mentalHealthSignals,
+      'sentiment': sentiment,
+      'keywords': keywords,
+    };
+  }
+
+  /// 긍정 점수 계산: (joy + peace) / 2 (0-10 범위)
+  double get positiveScore {
+    final joy = emotions['joy'] ?? 0;
+    final peace = emotions['peace'] ?? 0;
+    return (joy + peace) / 2.0;
+  }
+
+  /// 부정 점수 계산: (sadness + anger + anxiety) / 3 (0-10 범위)
+  double get negativeScore {
+    final sadness = emotions['sadness'] ?? 0;
+    final anger = emotions['anger'] ?? 0;
+    final anxiety = emotions['anxiety'] ?? 0;
+    return (sadness + anger + anxiety) / 3.0;
+  }
+
+  /// 최종 점수 계산 (A-1 방식): (긍정 점수 / (긍정 점수 + 부정 점수 + 0.01)) × 100
+  double get finalScoreA1 {
+    final pos = positiveScore;
+    final neg = negativeScore;
+    return (pos / (pos + neg + 0.01)) * 100;
+  }
+
+  /// 최종 점수 계산 (B-3 방식): ((positive - negative + 1) / 2) × 100
+  double get finalScoreB3 {
+    final positive = sentiment['positive'] ?? 0.0;
+    final negative = sentiment['negative'] ?? 0.0;
+    final score = ((positive - negative + 1) / 2) * 100;
+
+    // 0-100 범위 제한
+    return score.clamp(0.0, 100.0);
+  }
+
+  /// 기본 finalScore는 A-1 방식 사용 (하위 호환성)
+  double get finalScore => finalScoreA1;
 }

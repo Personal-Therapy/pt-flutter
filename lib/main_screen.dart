@@ -1,19 +1,17 @@
 import 'package:flutter/material.dart';
 import 'dart:ui';
-import 'dart:io'; // Platform detection
 import 'package:google_fonts/google_fonts.dart';
-import 'package:untitled/wearable_device_screen.dart';
-import 'package:untitled/profile_tab.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:untitled/services/health_service.dart'; // HealthService import
+import 'package:untitled/profile_tab.dart';
+import 'package:untitled/services/firestore_service.dart';
 
 // [!!] 1단계에서 만든 '추적' 탭 파일을 가져옵니다.
 import 'emotion_tracking_tab.dart';
 import 'healing_screen.dart';
 import 'diagnosis_screen.dart';
-import 'mood_detail_questions_screen.dart';
-import 'aichat_screen.dart'; // AIChatScreen 추가
 
+//ai채팅 탭
+import 'aichat_screen.dart';
 // --- Color Definitions ---
 const Color kColorBgStart = Color(0xFFEFF6FF);
 const Color kColorBgEnd = Color(0xFFFAF5FF);
@@ -36,8 +34,6 @@ const Color kColorEmergencyBtnText = Color(0xFFEF4444); // 긴급 버튼 텍스�
 const Color kColorEmergencyBtnBorder = Color(0xFFEF4444); // 긴급 버튼 테두리 (진한 빨강)
 const Color kColorBottomNavInactive = Color(0xFF9CA3AF); // 하단바 비활성 아이콘/텍스트
 
-bool _isMoodSelected = false;
-
 // CSV 텍스트 데이터 (동일)
 final Map<String, String> kTexts = {
   'main_greeting': '안녕하세요!',
@@ -47,8 +43,8 @@ final Map<String, String> kTexts = {
   'mood_analyze_button': '기분 분석하기',
   'mental_health_title': '정신건강 진단',
   'mental_health_subtitle': '전문적인 심리 상태\n체크',
-  'wearable_device_title': '웨어러블 기기 연동', // [!!] 2.1 추가
-  'wearable_device_subtitle': '활동, 수면, 심박수\n데이터 연동', // [!!] 2.2 추가
+  'healing_content_title': '힐링 콘텐츠',
+  'healing_content_subtitle': '맞춤형 치유\n콘텐츠',
   'today_healing_title': '오늘의 힐링',
   'today_healing_video_title': '5분 명상으로 마음 정리하기',
   'today_healing_video_description': '스트레스를 줄이고 마음의 평화를 찾는 간단한 명상법을 배워보세요.',
@@ -62,65 +58,48 @@ final Map<String, String> kTexts = {
   'nav_profile': '프로필',
 };
 
+// [!!] '상담'과 '프로필' 탭을 위한 임시 화면입니다.
+class PlaceholderTab extends StatelessWidget {
+  final String title;
+  const PlaceholderTab({Key? key, required this.title}) : super(key: key);
 
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(title, style: GoogleFonts.roboto(color: kColorTextTitle)),
+        backgroundColor: Colors.white,
+        centerTitle: true,
+      ),
+      body: Center(
+        child: Text(
+          '$title 페이지',
+          style: GoogleFonts.roboto(fontSize: 24, color: kColorTextSubtitle),
+        ),
+      ),
+    );
+  }
+}
 
 
 /// 탭을 관리하는 메인 스크린 (허브 역할)
 class MainScreen extends StatefulWidget {
-  const MainScreen({super.key});
+  const MainScreen({Key? key}) : super(key: key);
 
   @override
-  MainScreenState createState() => MainScreenState();
+  _MainScreenState createState() => _MainScreenState();
 }
 
-class MainScreenState extends State<MainScreen> {
+class _MainScreenState extends State<MainScreen> {
   // [!!] '홈' 탭의 슬라이더 값(_currentMoodValue)은
   // 이제 _HomeScreenContent 위젯 내부에서 관리합니다.
   int _selectedIndex = 0; // '홈' 탭을 기본값으로 설정
-  final HealthService _healthService = HealthService();
-  bool _healthPermissionRequested = false;
-
-  @override
-  void initState() {
-    super.initState();
-    // 로그인 성공 시 한번에 모든 Health 권한 요청
-    _requestHealthPermissions();
-  }
-
-  /// 앱 시작 시 모든 Health 권한을 한번에 요청
-  Future<void> _requestHealthPermissions() async {
-    if (_healthPermissionRequested) return;
-    _healthPermissionRequested = true;
-
-    try {
-      // Android: Health Connect 상태 확인
-      if (Platform.isAndroid) {
-        final status = await _healthService.checkHealthConnectStatus();
-        if (status.toString().contains('unavailable')) {
-          print('Health Connect가 설치되지 않았습니다.');
-          return;
-        }
-      }
-
-      // 모든 Health 데이터 타입에 대한 권한을 한번에 요청
-      print('🔐 앱 시작: 모든 Health 권한 요청 시작...');
-      bool authorized = await _healthService.requestAuthorization();
-
-      if (authorized) {
-        print('✅ 모든 Health 권한이 허용되었습니다.');
-      } else {
-        print('⚠️ Health 권한이 거부되었습니다.');
-      }
-    } catch (e) {
-      print('❌ Health 권한 요청 실패: $e');
-    }
-  }
 
   // [!!] 각 탭에 보여줄 페이지 위젯 리스트입니다.
   static final List<Widget> _pages = <Widget>[
     // 0: 홈 탭 (디자인 보존을 위해 별도 위젯으로 분리)
     const _HomeScreenContent(),
-    // 1: 상담 탭 (AIChatScreen으로 연결)
+    // 1: 상담 탭
     const AIChatScreen(),
     // 2: 추적 탭 (파일 1에서 만든 위젯)
     // '추적' 탭은 자체 디자인에 맞는 AppBar가 필요합니다.
@@ -232,8 +211,7 @@ class MainScreenState extends State<MainScreen> {
     return Container(
       decoration: const BoxDecoration(
         color: Colors.white,
-        border:
-            Border(
+        border: Border(
           top: BorderSide(
             color: Color(0xFFE5E7EB),
             width: 1.0,
@@ -247,7 +225,7 @@ class MainScreenState extends State<MainScreen> {
         selectedItemColor: kColorBtnPrimary,
         unselectedItemColor: kColorBottomNavInactive,
         selectedLabelStyle:
-            GoogleFonts.roboto(fontSize: 12, fontWeight: FontWeight.bold),
+        GoogleFonts.roboto(fontSize: 12, fontWeight: FontWeight.bold),
         unselectedLabelStyle: GoogleFonts.roboto(fontSize: 12),
         type: BottomNavigationBarType.fixed,
         elevation: 0,
@@ -278,7 +256,7 @@ class MainScreenState extends State<MainScreen> {
 // [!!] '홈' 탭의 모든 UI와 상태를 이 위젯이 관리합니다.
 // ---------------------------------------------------------------
 class _HomeScreenContent extends StatefulWidget {
-  const _HomeScreenContent({super.key});
+  const _HomeScreenContent({Key? key}) : super(key: key);
 
   @override
   _HomeScreenContentState createState() => _HomeScreenContentState();
@@ -287,7 +265,6 @@ class _HomeScreenContent extends StatefulWidget {
 class _HomeScreenContentState extends State<_HomeScreenContent> {
   // '홈' 탭의 슬라이더 상태를 여기서 관리
   double _currentMoodValue = 5.0;
-  final String? _currentUserId = FirebaseAuth.instance.currentUser?.uid;
 
   @override
   Widget build(BuildContext context) {
@@ -367,28 +344,33 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
                       ),
                     ),
                     const SizedBox(width: 16.0),
-                    // [!!!] 2. '힐링 콘텐츠' 카드를 InkWell로 감쌉니다. [!!!]
-                    // [!!!] 3. '힐링 콘텐츠' 카드를 '웨어러블 기기'로 수정 [!!!]
+// [!!!] 2. '힐링 콘텐츠' 카드를 InkWell로 감쌉니다. [!!!]
                     Expanded(
                       child: InkWell(
-                        // [!!] 3.1 힐링 스크린 -> 웨어러블 스크린으로 이동
+                        // [!] 힐링 스크린으로 이동하는 로직
                         onTap: () {
                           Navigator.push(
                             context,
-                            MaterialPageRoute(builder: (context) => const WearableDeviceScreen()),
+                            MaterialPageRoute(builder: (context) => const HealingScreen()),
                           );
                         },
+                        // [!] 카드의 둥근 모서리와 물결 효과를 맞춤
                         borderRadius: BorderRadius.circular(16.0),
                         child: _buildSmallFeatureCard(
-                          // [!!] 3.2 아이콘 변경 (시계 아이콘 예시)
-                          iconWidget: Icon(Icons.watch,
-                              color: kColorBtnPrimary, size: 48.0),
-                          // [!!] 3.3 텍스트 키 변경
-                          title: kTexts['wearable_device_title']!,
-                          subtitle: kTexts['wearable_device_subtitle']!,
+                          iconWidget: Image.asset(
+                            'assets/images/heart.png',
+                            width: 48.0,
+                            height: 48.0,
+                            errorBuilder: (context, error, stackTrace) =>
+                            const Icon(Icons.error_outline,
+                                color: kColorError, size: 48.0),
+                          ),
+                          title: kTexts['healing_content_title']!,
+                          subtitle: kTexts['healing_content_subtitle']!,
                         ),
                       ),
-                    ),                  ],
+                    ),
+                  ],
                 ),
                 const SizedBox(height: 24.0),
 
@@ -401,15 +383,7 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
                   ),
                 ),
                 const SizedBox(height: 16.0),
-                GestureDetector(
-                  onTap: () {
-                    Navigator.push(
-                      context,
-                      MaterialPageRoute(builder: (context) => const HealingScreen()),
-                    );
-                  },
-                  child: _buildTodayHealingCard(),
-                ),
+                _buildTodayHealingCard(),
                 const SizedBox(height: 24.0),
 
                 _buildEmergencyCard(),
@@ -460,7 +434,7 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
                 inactiveTrackColor: kColorMoodSliderInactive,
                 thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 8.0),
                 thumbColor: kColorBtnPrimary,
-                overlayColor: kColorBtnPrimary.withOpacity(0.2), // ignore: deprecated_member_use
+                overlayColor: kColorBtnPrimary.withOpacity(0.2),
                 overlayShape: const RoundSliderOverlayShape(overlayRadius: 16.0),
                 valueIndicatorShape: const PaddleSliderValueIndicatorShape(),
                 valueIndicatorColor: kColorBtnPrimary,
@@ -477,9 +451,9 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
                 value: _currentMoodValue,
                 label: _currentMoodValue.round().toString(),
                 onChanged: (value) {
+                  // [!!] 이 위젯(_HomeScreenContent)의 상태를 업데이트
                   setState(() {
                     _currentMoodValue = value;
-                    _isMoodSelected = true; // 슬라이더를 움직였다는 표시
                   });
                 },
               ),
@@ -495,23 +469,27 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
             ),
             const SizedBox(height: 24.0),
             ElevatedButton(
-              onPressed: (_currentUserId == null || !_isMoodSelected)
-                  ? null  // 로그인 안 했거나 기분을 선택하지 않으면 비활성화
-                  : () {
-                // 기분 분석 상세 질문 화면으로 이동
-                Navigator.push(
-                  context,
-                  MaterialPageRoute(
-                    builder: (context) => MoodDetailQuestionsScreen(
-                      moodScore: _currentMoodValue.round(),
-                      userId: _currentUserId,
-                    ),
-                  ),
-                );
+              onPressed: () async {
+                // 슬라이더 값(1-10)을 100점 만점으로 변환
+                final int moodScore = (_currentMoodValue * 10).round();
+                debugPrint('[MOOD_CHECK] 슬라이더 값: ${_currentMoodValue.round()} / 10');
+                debugPrint('[MOOD_CHECK] 기분 점수: $moodScore / 100');
+
+                // Firestore에 저장
+                final userId = FirebaseAuth.instance.currentUser?.uid;
+                if (userId != null) {
+                  final firestoreService = FirestoreService();
+                  await firestoreService.updateDailyMentalStatus(
+                    uid: userId,
+                    moodCheckScore: moodScore,
+                  );
+                  debugPrint('[MOOD_CHECK] Firestore 저장 완료!');
+                } else {
+                  debugPrint('[MOOD_CHECK] 로그인되지 않음 - 저장 실패');
+                }
               },
               style: ElevatedButton.styleFrom(
                 backgroundColor: kColorBtnPrimary,
-                disabledBackgroundColor: Colors.grey[300], // 비활성화 시 색상
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(12.0),
                 ),
@@ -520,9 +498,7 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
               child: Text(
                 kTexts['mood_analyze_button']!,
                 style: GoogleFonts.roboto(
-                  color: (_currentUserId == null || !_isMoodSelected)
-                      ? Colors.grey[600]
-                      : Colors.white,
+                  color: Colors.white,
                   fontSize: 14,
                   fontWeight: FontWeight.bold,
                 ),
@@ -591,7 +567,7 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
             children: [
               ClipRRect(
                 borderRadius:
-                    const BorderRadius.vertical(top: Radius.circular(16.0)),
+                const BorderRadius.vertical(top: Radius.circular(16.0)),
                 child: Image.network(
                   'https://placehold.co/600x300/E0E7FF/1F2937?text=Video+Thumbnail', // Placeholder 이미지
                   height: 200,
@@ -728,5 +704,4 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
       ),
     );
   }
-}
-// [!!] _HomeScreenContentState 끝
+} // [!!] _HomeScreenContentState 끝
