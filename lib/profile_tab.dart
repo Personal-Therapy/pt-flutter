@@ -144,11 +144,12 @@ class ProfileTabState extends State<ProfileTab> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ✅ 프로필 정보 (기존 그대로 유지)
               Row(
                 children: [
                   CircleAvatar(
                     radius: 32,
-                    backgroundColor: Color(0xFFDBEAFE),
+                    backgroundColor: const Color(0xFFDBEAFE),
                     child: Icon(Icons.person, size: 30, color: kColorBtnPrimary),
                   ),
                   const SizedBox(width: 16),
@@ -157,37 +158,48 @@ class ProfileTabState extends State<ProfileTab> {
                     children: [
                       Text(
                         userName,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
-                          color: kColorTextTitle,
                         ),
                       ),
-                      SizedBox(height: 4),
+                      const SizedBox(height: 4),
                       Text(
                         'Personal Therapy와 함께한 지 ${daysWithApp}일',
-                        style: TextStyle(fontSize: 14, color: kColorTextSubtitle),
+                        style: const TextStyle(fontSize: 14, color: kColorTextSubtitle),
                       ),
                     ],
                   ),
                 ],
               ),
-              Divider(height: 32, color: Colors.grey[200]),
-              SingleChildScrollView(
-                scrollDirection: Axis.horizontal,
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceAround,
-                  children: [
-                    _buildStatItem('대화 횟수', conversationCount, kColorBtnPrimary),
-                    SizedBox(width: 16), // Add spacing between items
-                    _buildStatItem('평균 건강점수', averageHealthScore, kPrimaryGreen),
-                    SizedBox(width: 16), // Add spacing between items
-                    _buildStatItem('힐링 콘텐츠', healingContentCount, kPrimaryPurple),
-                  ],
-                ),
-              )
+
+              const SizedBox(height: 20),
+              Divider(color: Colors.grey[200]),
+              const SizedBox(height: 16),
+
+              // ✅ 통계는 이 Row 하나만!
+              Row(
+                children: [
+                  Expanded(
+                    child: Center(
+                      child: _buildStatItem('대화 횟수', conversationCount, kColorBtnPrimary),
+                    ),
+                  ),
+                  Expanded(
+                    child: Center(
+                      child: _buildStatItem('평균 건강 점수', averageHealthScore, kPrimaryGreen),
+                    ),
+                  ),
+                  Expanded(
+                    child: Center(
+                      child: _buildStatItem('힐링 콘텐츠', healingContentCount, kPrimaryPurple),
+                    ),
+                  ),
+                ],
+              ),
             ],
           );
+
         },
       ),
     );
