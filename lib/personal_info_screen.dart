@@ -502,10 +502,29 @@ class PersonalInfoScreenState extends State<PersonalInfoScreen> {
                     _newPasswordController.clear();
                     _confirmPasswordController.clear();
                   } on FirebaseAuthException catch (e) {
+                    String message;
+
+                    if (e.code == 'wrong-password' ||
+                        e.code == 'invalid-credential' ||
+                        e.code == 'user-mismatch') {
+                      message = '현재 비밀번호가 일치하지 않습니다';
+                    } else if (e.code == 'weak-password') {
+                      message = '새 비밀번호가 너무 약합니다';
+                    } else if (e.code == 'requires-recent-login') {
+                      message = '보안을 위해 다시 로그인해 주세요';
+                    } else {
+                      message = '비밀번호 변경에 실패했습니다';
+                    }
+
+                    debugPrint('FirebaseAuthException code: ${e.code}');
+
+                    if (!mounted) return;
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('비밀번호 변경 실패: ${e.message}')),
+                      SnackBar(content: Text(message)),
                     );
                   }
+
+
                 },
 
                 style: ElevatedButton.styleFrom(
