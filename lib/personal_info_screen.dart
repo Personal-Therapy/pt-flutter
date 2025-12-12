@@ -44,7 +44,7 @@ class PersonalInfoScreenState extends State<PersonalInfoScreen> {
   late TextEditingController _currentPasswordController;
   late TextEditingController _newPasswordController;
   late TextEditingController _confirmPasswordController;
-
+  late TextEditingController _birthController;
 
   @override
   void initState() {
@@ -57,6 +57,9 @@ class PersonalInfoScreenState extends State<PersonalInfoScreen> {
     _phoneController = TextEditingController(
       text: widget.userData['phone'] ?? '',
     );
+    _birthController = TextEditingController(
+      text: widget.userData['birth'] ?? '',
+    );
 
     _currentPasswordController = TextEditingController();
     _newPasswordController = TextEditingController();
@@ -67,6 +70,7 @@ class PersonalInfoScreenState extends State<PersonalInfoScreen> {
   void dispose() {
     _nameController.dispose();
     _phoneController.dispose();
+    _birthController.dispose();
 
     // [!!] 4. 비밀번호 컨트롤러 dispose
     _currentPasswordController.dispose();
@@ -166,11 +170,87 @@ class PersonalInfoScreenState extends State<PersonalInfoScreen> {
             SizedBox(height: 16),
 
             // 'DIV-66' (생년월일 - readonly)
-            _buildInfoRowReadOnly(
-              label: '생년월일', // 'H3-68'
-              value: widget.userData['birth'] ?? '', // 'INPUT-71'
+          _buildSettingCard(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                const Text(
+                  '생년월일',
+                  style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600),
+                ),
+                const SizedBox(height: 12),
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextField(
+                        controller: _birthController,
+                        readOnly: true,
+                        onTap: () async {
+                          final pickedDate = await showDatePicker(
+                            context: context,
+                            initialDate:
+                            DateTime.tryParse(_birthController.text) ??
+                                DateTime(2000),
+                            firstDate: DateTime(1900),
+                            lastDate: DateTime.now(),
+                            locale: const Locale('ko'),
+                          );
+
+                          if (pickedDate == null) return;
+
+                          final formatted =
+                              '${pickedDate.year}-${pickedDate.month.toString().padLeft(2, '0')}-${pickedDate.day.toString().padLeft(2, '0')}';
+
+                          setState(() {
+                            _birthController.text = formatted;
+                          });
+                        },
+                        decoration: InputDecoration(
+                          filled: true,
+                          fillColor: kColorEditTextBg,
+                          border: OutlineInputBorder(
+                            borderRadius: BorderRadius.circular(8),
+                            borderSide: BorderSide.none,
+                          ),
+                          contentPadding: const EdgeInsets.symmetric(
+                              horizontal: 16, vertical: 12),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    ElevatedButton(
+                      onPressed: () async {
+                        await FirebaseFirestore.instance
+                            .collection('users')
+                            .doc(uid)
+                            .update({
+                          'birth': _birthController.text.trim(),
+                        });
+
+                        if (!mounted) return;
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          const SnackBar(content: Text('생년월일이 변경되었습니다')),
+                        );
+                      },
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: kColorBtnPrimary,
+                        foregroundColor: Colors.white,
+                        padding: const EdgeInsets.symmetric(
+                            horizontal: 24, vertical: 12),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                      ),
+                      child: const Text('변경'),
+                    ),
+                  ],
+                ),
+              ],
             ),
-            SizedBox(height: 16),
+          ),
+
+
+          SizedBox(height: 16),
 
             // [!!] 5. 'DIV-97' (비밀번호) -> _buildPasswordSection으로 변경
             _buildPasswordSection(),
@@ -221,42 +301,48 @@ class PersonalInfoScreenState extends State<PersonalInfoScreen> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(label, style: TextStyle(fontSize: 16, fontWeight: FontWeight.w600)), // 'H3'
-          SizedBox(height: 12),
+          Text(label,
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+          const SizedBox(height: 12),
           Row(
             children: [
               Expanded(
-                child: TextField( // 'INPUT'
+                child: TextField(
                   controller: controller,
                   keyboardType: keyboardType,
                   decoration: InputDecoration(
                     filled: true,
                     fillColor: kColorEditTextBg,
-                    border: OutlineInputBorder(borderSide: BorderSide.none, borderRadius: BorderRadius.circular(8)),
-                    contentPadding: EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(8),
+                      borderSide: BorderSide.none,
+                    ),
+                    contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16, vertical: 12),
                   ),
                 ),
               ),
-              SizedBox(width: 12),
+              const SizedBox(width: 12),
               ElevatedButton(
                 onPressed: onPressed,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: kColorBtnPrimary,
                   foregroundColor: Colors.white,
-                  padding: EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                  padding: const EdgeInsets.symmetric(
+                      horizontal: 24, vertical: 12),
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
                 ),
                 child: Text(buttonText),
-              )
-
+              ),
             ],
           ),
         ],
       ),
     );
   }
+
 
   // 'DIV-35', 'DIV-66' (읽기 전용 필드)
   Widget _buildInfoRowReadOnly({required String label, required String value}) {
