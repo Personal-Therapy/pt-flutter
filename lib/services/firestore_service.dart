@@ -404,4 +404,26 @@ class FirestoreService {
         .snapshots()
         .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
   }
+
+  Future<int?> getTodayOverallScore(String uid) async {
+    final dateKey = _getFormattedDateKey(DateTime.now());
+
+    final doc = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('daily_mental_status')
+        .doc(dateKey)
+        .get();
+
+    if (!doc.exists) return null;
+
+    final data = doc.data();
+    if (data == null) return null;
+
+    final score = data['overallScore'];
+    if (score is int) return score;
+    if (score is num) return score.round();
+
+    return null;
+  }
 }

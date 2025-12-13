@@ -1,7 +1,10 @@
+import 'package:firebase_auth/firebase_auth.dart';
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
-import 'services/youtube_service.dart';
+import 'services/healing_recommendation_service.dart';
+import 'package:untitled/services/firestore_service.dart';
+
 
 const Color kColorBg = Color(0xFFF9FAFB);
 const Color kColorTextTitle = Color(0xFF1F2937);
@@ -18,70 +21,92 @@ class HealingScreen extends StatefulWidget {
 
 class _HealingScreenState extends State<HealingScreen> {
   int _selectedToggleIndex = 0; // 0: 전체, 1: 명상, 2: 수면, 3: ASMR
-  final YoutubeService _youtube = YoutubeService();
+  final HealingRecommendationService _healingService = HealingRecommendationService();
 
   bool _loading = true;
   List<Map<String, String>> _videos = [];
+  int _userScore = 65; // 기본값
   String? _error;
 
   @override
   void initState() {
     super.initState();
-    _loadVideos();
+    _initializeScore();
   }
 
+  Future<void> _initializeScore() async {
+    final uid = FirebaseAuth.instance.currentUser?.uid;
+    if (uid != null) {
+      final firestoreScore = await FirestoreService().getTodayOverallScore(uid);
+      if (firestoreScore != null) {
+        _userScore = firestoreScore;
+      }
+    }
+    print('[HealingScreen] 사용자 점수: $_userScore');
+    _loadVideos();
+  }
   Future<void> _loadVideos() async {
     setState(() {
       _loading = true;
       _error = null;
     });
+
     try {
-      List<Map<String, String>> fetched = [];
+      List<Map<String, String>> fetched;
+
       switch (_selectedToggleIndex) {
-        case 0:
-          fetched = await _youtube.fetchByKeyword('힐링 명상 음악');
+        case 0: // 전체
+          print('[HealingScreen] 전체 추천 로딩...');
+          fetched = await _healingService.getHealingRecommendations(
+            userScore: _userScore,
+            totalResults: 10,
+          );
           break;
-        case 1:
-          fetched = await _youtube.fetchByKeyword('명상 meditation mindfulness');
+        case 1: // 명상
+          print('[HealingScreen] 명상 카테고리 로딩...');
+          fetched = await _healingService.getVideosByCategory(
+            category: '명상',
+            userScore: _userScore,
+            totalResults: 10,
+          );
           break;
-        case 2:
-          fetched = await _youtube.fetchByKeyword('수면 음악 sleep relaxation');
+        case 2: // 수면
+          print('[HealingScreen] 수면 카테고리 로딩...');
+          fetched = await _healingService.getVideosByCategory(
+            category: '수면',
+            userScore: _userScore,
+            totalResults: 10,
+          );
           break;
-        case 3:
-          fetched = await _youtube.fetchByKeyword('ASMR 자연소리 힐링');
+        case 3: // ASMR
+          print('[HealingScreen] ASMR 카테고리 로딩...');
+          fetched = await _healingService.getVideosByCategory(
+            category: 'ASMR',
+            userScore: _userScore,
+            totalResults: 10,
+          );
           break;
+        default:
+          fetched = [];
       }
+
       setState(() {
         _videos = fetched;
         _loading = false;
       });
     } catch (e) {
-      print('Error loading videos: $e'); // 디버그 로그
-      if (e.toString().contains('YOUTUBE_API_KEY is not set')) {
-        setState(() {
-          _error = 'YouTube API 키가 설정되지 않았습니다. .env 파일을 확인해주세요.';
-          _loading = false;
-        });
-      } else if (e.toString().contains('403')) {
-        setState(() {
-          _error = 'YouTube API 할당량이 초과되었거나 API 키가 유효하지 않습니다.\n잠시 후 다시 시도해주세요.';
-          _loading = false;
-        });
-      } else if (e.toString().contains('400')) {
-        setState(() {
-          _error = 'YouTube API 요청이 잘못되었습니다.\n개발자에게 문의해주세요.';
-          _loading = false;
-        });
-      } else {
-        setState(() {
-          _error = '데이터를 불러오는 데 실패했습니다.\n인터넷 연결을 확인하거나 잠시 후 다시 시도해주세요.\n\n오류: ${e.toString()}';
-          _loading = false;
-        });
-      }
+      print('[HealingScreen] 로딩 실패: $e');
+      setState(() {
+        _error = '힐링 콘텐츠를 불러오지 못했습니다.\n$e';
+        _loading = false;
+      });
     }
   }
 
+
   void _onToggle(int index) {
+    if (_selectedToggleIndex == index) return;
+
     setState(() => _selectedToggleIndex = index);
     _loadVideos();
   }

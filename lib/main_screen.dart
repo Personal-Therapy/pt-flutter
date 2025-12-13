@@ -4,18 +4,20 @@ import 'dart:ui';
 import 'dart:io'; // Platform detection
 import 'package:google_fonts/google_fonts.dart';
 import 'package:untitled/profile_tab.dart';
-import 'package:untitled/wearable_device_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 // [!!] 파일 임포트 복구
 import 'package:untitled/wearable_device_screen.dart'; // 웨어러블 화면
-import 'package:untitled/profile_tab.dart';
 import 'package:untitled/services/health_service.dart'; // 헬스 서비스
 import 'emotion_tracking_tab.dart';
 import 'healing_screen.dart';
 import 'diagnosis_screen.dart';
 import 'mood_detail_questions_screen.dart'; // 기분 상세 질문 화면
 import 'aichat_screen.dart';
+import 'package:untitled/services/healing_recommendation_service.dart';
+import 'package:untitled/services/firestore_service.dart';
+
 
 // --- Color Definitions ---
 const Color kColorBgStart = Color(0xFFEFF6FF);
@@ -305,6 +307,46 @@ class _HomeScreenContent extends StatefulWidget {
 class _HomeScreenContentState extends State<_HomeScreenContent> {
   double _currentMoodValue = 5.0;
   final String? _currentUserId = FirebaseAuth.instance.currentUser?.uid;
+  final HealingRecommendationService _healingService =
+  HealingRecommendationService();
+  final FirestoreService _firestoreService = FirestoreService();
+
+  Map<String, String>? _todayHealingVideo;
+  bool _loadingHealing = true;
+
+  @override
+  void initState() {
+    super.initState();
+    _loadTodayHealing();
+  }
+
+  Future<void> _loadTodayHealing() async {
+    if (_currentUserId == null) {
+      setState(() => _loadingHealing = false);
+      return;
+    }
+
+    try {
+      int? score = await _firestoreService.getTodayOverallScore(_currentUserId!);
+
+      // 오늘 점수 없으면 기본값
+      score ??= 65;
+
+      print(' [홈] 오늘의 힐링 점수 사용값 = $score');
+
+      final videos = await _healingService.getHealingRecommendations(userScore: score);
+
+      setState(() {
+        _todayHealingVideo = videos.isNotEmpty ? videos.first : null;
+        _loadingHealing = false;
+      });
+    } catch (e) {
+      debugPrint('오늘의 힐링 로드 실패: $e');
+      setState(() => _loadingHealing = false);
+    }
+  }
+
+
 
   @override
   Widget build(BuildContext context) {
@@ -437,6 +479,8 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
         ),
       ],
     );
+
+
   }
 
   Widget _buildMoodCheckCard() {
@@ -594,74 +638,115 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
   }
 
   Widget _buildTodayHealingCard() {
-    return Card(
-      elevation: 2.0,
-      color: kColorCardBg,
-      shape: RoundedRectangleBorder(
-        borderRadius: BorderRadius.circular(16.0),
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Stack(
-            alignment: Alignment.center,
-            children: [
-              ClipRRect(
-                borderRadius:
-                const BorderRadius.vertical(top: Radius.circular(16.0)),
-                child: Image.network(
-                  'https://placehold.co/600x300/E0E7FF/1F2937?text=Video+Thumbnail',
-                  height: 200,
-                  width: double.infinity,
-                  fit: BoxFit.cover,
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    height: 200,
-                    color: Colors.grey[200],
-                    child: Center(
-                        child: Icon(Icons.video_call_outlined,
-                            color: Colors.grey[400], size: 50)),
-                  ),
-                ),
-              ),
-              GestureDetector(
-                onTap: () {
-                  // TODO: 영상 재생 로직
-                },
-                child: const CircleAvatar(
-                  radius: 30,
-                  backgroundColor: Colors.black54,
-                  child: Icon(Icons.play_arrow, color: Colors.white, size: 40),
-                ),
-              ),
-            ],
-          ),
-          Padding(
-            padding: const EdgeInsets.all(20.0),
+    if (_loadingHealing) {
+      return const Center(child: CircularProgressIndicator());
+    }
+
+    if (_todayHealingVideo == null) {
+      return Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.all(40.0),
+          child: Center(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
+                const Icon(Icons.video_library_outlined, size: 48, color: Colors.grey),
+                const SizedBox(height: 16),
                 Text(
-                  kTexts['today_healing_video_title']!,
-                  style: GoogleFonts.roboto(
-                    fontSize: 16,
-                    fontWeight: FontWeight.bold,
-                    color: kColorTextTitle,
-                  ),
-                ),
-                const SizedBox(height: 8.0),
-                Text(
-                  kTexts['today_healing_video_description']!,
-                  style: GoogleFonts.roboto(
-                    fontSize: 14,
-                    color: kColorTextSubtitle,
-                  ),
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
+                  '오늘의 힐링 콘텐츠가 없습니다.',
+                  style: GoogleFonts.roboto(color: kColorTextSubtitle),
                 ),
               ],
             ),
           ),
-        ],
+        ),
+      );
+    }
+
+    final video = _todayHealingVideo!;
+
+    return GestureDetector(
+      onTap: () {
+        // 바로 유튜브 영상 재생 화면으로 이동
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => YoutubePlayerPage(
+              videoId: video['id'] ?? '',
+              title: video['title'] ?? '',
+            ),
+          ),
+        );
+      },
+      child: Card(
+        elevation: 2,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Stack(
+              alignment: Alignment.center,
+              children: [
+                ClipRRect(
+                  borderRadius: const BorderRadius.vertical(top: Radius.circular(16)),
+                  child: Image.network(
+                    video['thumb'] ?? '',
+                    height: 200,
+                    width: double.infinity,
+                    fit: BoxFit.cover,
+                    errorBuilder: (context, error, stack) => Container(
+                      height: 200,
+                      color: Colors.grey[200],
+                      child: const Center(child: Icon(Icons.broken_image, size: 50)),
+                    ),
+                  ),
+                ),
+                // 재생 버튼 표시
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: const BoxDecoration(
+                    color: Colors.black54,
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.play_arrow, color: Colors.white, size: 48),
+                ),
+              ],
+            ),
+            Padding(
+              padding: const EdgeInsets.all(20),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    video['title'] ?? '',
+                    style: GoogleFonts.roboto(
+                      fontSize: 16,
+                      fontWeight: FontWeight.bold,
+                      color: kColorTextTitle,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    video['desc'] ?? '',
+                    style: GoogleFonts.roboto(
+                      fontSize: 14,
+                      color: kColorTextSubtitle,
+                    ),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
