@@ -1,6 +1,10 @@
 package com.project.personaltherapy
 
 import android.os.Bundle
+import androidx.health.connect.client.HealthConnectClient
+import androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord
+import androidx.health.connect.client.request.ReadRecordsRequest
+import androidx.health.connect.client.time.TimeRangeFilter
 import io.flutter.embedding.android.FlutterFragmentActivity
 import io.flutter.embedding.engine.FlutterEngine
 import io.flutter.plugin.common.MethodChannel
@@ -8,11 +12,26 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import java.time.Instant
 
 class MainActivity : FlutterFragmentActivity() {
+    companion object {
+        var instance: MainActivity? = null
+    }
+
     private val CHANNEL = "com.project.personaltherapy/samsung_health"
     private var healthDataStore: Any? = null
     private var samsungHealthAvailable = false
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        instance = this
+    }
+
+    override fun onDestroy() {
+        super.onDestroy()
+        instance = null
+    }
 
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
@@ -55,6 +74,7 @@ class MainActivity : FlutterFragmentActivity() {
                 "checkSamsungHealthAvailable" -> {
                     checkSamsungHealthAvailable(result)
                 }
+                // 'getLatestHrvData'는 더 이상 사용되지 않으므로 제거됨
                 else -> {
                     result.notImplemented()
                 }
@@ -73,15 +93,16 @@ class MainActivity : FlutterFragmentActivity() {
                 // Health Connect Client 가져오기
                 val healthConnectClientClass = Class.forName("androidx.health.connect.client.HealthConnectClient")
                 val getOrCreateMethod = healthConnectClientClass.getMethod("getOrCreate", android.content.Context::class.java)
-                val healthConnectClient = getOrCreateMethod.invoke(null, applicationContext)
+                getOrCreateMethod.invoke(null, applicationContext)
 
-                println("✅ HealthConnectClient 생성 완료: $healthConnectClient")
+                println("✅ HealthConnectClient 생성 완료")
 
                 // 권한 목록 생성
                 val permissionClass = Class.forName("androidx.health.connect.client.permission.HealthPermission")
 
-                // READ 권한 생성 메서드 찾기
+                // READ/WRITE 권한 생성 메서드 찾기
                 val createReadPermissionMethod = permissionClass.getMethod("createReadPermission", Class::class.java)
+                val createWritePermissionMethod = permissionClass.getMethod("createWritePermission", Class::class.java)
 
                 // 모든 Health Connect Record 클래스들
                 val recordClasses = listOf(
@@ -122,15 +143,23 @@ class MainActivity : FlutterFragmentActivity() {
                 )
 
                 // 권한 생성 (클래스가 없는 경우 무시)
-                val permissions = recordClasses.mapNotNull { className ->
+                val permissions = mutableSetOf<String>()
+                recordClasses.forEach { className ->
                     try {
                         val recordClass = Class.forName(className)
-                        createReadPermissionMethod.invoke(null, recordClass) as String
+                        // 모든 데이터 타입에 대해 읽기 권한 추가
+                        permissions.add(createReadPermissionMethod.invoke(null, recordClass) as String)
+
+                        // HRV 데이터 타입에 대해서만 쓰기 권한 추가
+                        if (className == "androidx.health.connect.client.records.HeartRateVariabilityRmssdRecord") {
+                            permissions.add(createWritePermissionMethod.invoke(null, recordClass) as String)
+                            println("✅ HRV 쓰기 권한 요청 추가")
+                        }
                     } catch (e: ClassNotFoundException) {
                         println("⚠️ 클래스 없음 (무시): $className")
-                        null
                     }
-                }.toSet()
+                }
+
 
                 println("✅ 권한 목록 생성 완료: ${permissions.size}개")
                 permissions.forEach { println("   - $it") }
@@ -214,7 +243,7 @@ class MainActivity : FlutterFragmentActivity() {
                 val request = buildMethod.invoke(builder)
 
                 // readRecords 호출
-                val readRecordsMethod = client.javaClass.getMethod("readRecords", requestClass, kotlin.coroutines.Continuation::class.java)
+                client.javaClass.getMethod("readRecords", requestClass, kotlin.coroutines.Continuation::class.java)
 
                 // 결과 처리
                 val records = mutableListOf<Map<String, Any>>()
@@ -233,19 +262,40 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     /**
-     * Health Connect에서 심박수 변이도(HRV) 데이터 가져오기
+     * Health Connect에서 심박수 변이도(HRV) 데이터 가져오기 (수정됨)
      */
     private fun getHeartRateVariability(startTimeMillis: Long, endTimeMillis: Long, result: MethodChannel.Result) {
         CoroutineScope(Dispatchers.IO).launch {
             try {
-                println("📊 HRV 데이터 가져오기: $startTimeMillis ~ $endTimeMillis")
+                val healthConnectClient = HealthConnectClient.getOrCreate(applicationContext)
 
-                // 간단한 구현: 현재는 빈 리스트 반환
-                val records = mutableListOf<Map<String, Any>>()
+                println("📊 HRV 데이터 가져오기 (Health Connect): $startTimeMillis ~ $endTimeMillis")
+
+                // ✅ 헬스 커넥트에서 읽어오기
+                val request = ReadRecordsRequest(
+                    recordType = HeartRateVariabilityRmssdRecord::class,
+                    timeRangeFilter = TimeRangeFilter.between(
+                        Instant.ofEpochMilli(startTimeMillis),
+                        Instant.ofEpochMilli(endTimeMillis)
+                    )
+                )
+
+                val response = healthConnectClient.readRecords(request)
+
+                // 결과 반환용 리스트 변환
+                val dataList = response.records.map { record ->
+                    mapOf(
+                        "rmssd" to record.heartRateVariabilityMillis,
+                        "timestamp" to record.time.toEpochMilli()
+                    )
+                }
+
+                println("✅ HRV 데이터 ${dataList.size}개 조회 완료")
 
                 withContext(Dispatchers.Main) {
-                    result.success(records)
+                    result.success(dataList)
                 }
+
             } catch (e: Exception) {
                 println("❌ HRV 데이터 읽기 실패: ${e.message}")
                 e.printStackTrace()
@@ -255,6 +305,7 @@ class MainActivity : FlutterFragmentActivity() {
             }
         }
     }
+
 
     /**
      * Samsung Health가 사용 가능한지 확인
@@ -324,7 +375,7 @@ class MainActivity : FlutterFragmentActivity() {
 
                 // Permission 클래스 (올바른 패키지 경로 사용)
                 val permissionClass = Class.forName("com.samsung.android.sdk.health.data.permission.Permission")
-                val dataTypeClass = Class.forName("com.samsung.android.sdk.health.data.request.DataType")
+                Class.forName("com.samsung.android.sdk.health.data.request.DataType")
                 val accessTypeClass = Class.forName("com.samsung.android.sdk.health.data.permission.AccessType")
 
                 // DataType.HeartRateType 가져오기
@@ -356,9 +407,9 @@ class MainActivity : FlutterFragmentActivity() {
                             android.app.Activity::class.java
                         )
                         println("🚀 권한 요청 중...")
-                        val permissionResult = requestPermissionsMethod.invoke(healthDataStore, permissions, this@MainActivity)
+                        requestPermissionsMethod.invoke(healthDataStore, permissions, this@MainActivity)
 
-                        println("✅ Samsung Health 권한 요청 완료: $permissionResult")
+                        println("✅ Samsung Health 권한 요청 완료")
                         result.success(true)
                     } catch (e: Exception) {
                         println("❌ 권한 요청 실패: ${e.message}")

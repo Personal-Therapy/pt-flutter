@@ -84,8 +84,8 @@ class _WearableDeviceScreenState extends State<WearableDeviceScreen> {
 
       // 권한이 이미 있는지 확인 (MainScreen에서 이미 요청했음)
       print('🔍 Health 권한 확인 중...');
-      bool authorized = true; // MainScreen에서 이미 권한을 요청했다고 가정
-
+      bool authorized = await _healthService.requestAuthorization();
+      print('📋 Health 권한 상태: $authorized');
       // 필요하면 권한 재요청 (사용자가 명시적으로 거부한 경우)
       // authorized = await _healthService.requestAuthorization();
 
