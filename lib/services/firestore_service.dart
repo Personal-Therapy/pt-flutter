@@ -165,13 +165,14 @@ class FirestoreService {
 
     // 1. 기존 데이터 가져오기
     final existingDoc = await docRef.get();
-    final existingData = existingDoc.data() ?? {};
+    final Map<String, dynamic> existingData = existingDoc.data() ?? {};
     final componentScores = existingData['componentScores'] ?? {};
 
     // -----------------------------------------------------------------------
     // A. 자가진단 (Self-Diagnosis) 처리
     // -----------------------------------------------------------------------
     Map<String, dynamic> selfDiagMap = {};
+    // [안전장치] 기존 데이터가 Map인지 확인
     if (componentScores['selfDiagnosis'] is Map) {
       selfDiagMap = Map<String, dynamic>.from(componentScores['selfDiagnosis']);
     }
@@ -197,34 +198,46 @@ class FirestoreService {
     // B. 현재 값 확정 (안전 모드)
     // -----------------------------------------------------------------------
 
-    // 1. Mood Check
+    // 1. Mood Check 안전하게 가져오기
     int? currentMood = moodCheckScore;
     if (currentMood == null) {
       var rawMood = componentScores['dailyEmotion']?['moodCheck'];
-      if (rawMood is int) currentMood = rawMood;
-      else if (rawMood is num) currentMood = rawMood.round();
-      else if (rawMood is Map && rawMood['score'] is num) currentMood = (rawMood['score'] as num).round();
+      if (rawMood is int) {
+        currentMood = rawMood;
+      } else if (rawMood is num) {
+        currentMood = rawMood.round();
+      } else if (rawMood is Map && rawMood['score'] is num) {
+        // 혹시 {score: 50} 형태로 저장되어 있다면 점수만 추출
+        currentMood = (rawMood['score'] as num).round();
+      }
     }
 
-    // 2. AI Conversation
+    // 2. AI Conversation 안전하게 가져오기
     int? currentAi = aiConversationScore;
     if (currentAi == null) {
       var rawAi = componentScores['dailyEmotion']?['aiConversation'];
-      if (rawAi is int) currentAi = rawAi;
-      else if (rawAi is num) currentAi = rawAi.round();
-      else if (rawAi is Map) {
+      if (rawAi is int) {
+        currentAi = rawAi;
+      } else if (rawAi is num) {
+        currentAi = rawAi.round();
+      } else if (rawAi is Map) {
+        // {'average': 70} 형태인 경우 처리
         var avg = rawAi['average'];
         if (avg is num) currentAi = avg.round();
       }
     }
 
-    // 3. Biometric Stress
+    // 3. Biometric Stress 안전하게 가져오기
     int? currentBio = biometricStressScore;
     if (currentBio == null) {
       var rawBio = componentScores['biometricStress'];
-      if (rawBio is int) currentBio = rawBio;
-      else if (rawBio is num) currentBio = rawBio.round();
-      else if (rawBio is Map && rawBio['score'] is num) currentBio = (rawBio['score'] as num).round();
+      if (rawBio is int) {
+        currentBio = rawBio;
+      } else if (rawBio is num) {
+        currentBio = rawBio.round();
+      } else if (rawBio is Map && rawBio['score'] is num) {
+        currentBio = (rawBio['score'] as num).round();
+      }
     }
 
     // -----------------------------------------------------------------------
@@ -281,6 +294,7 @@ class FirestoreService {
         'selfDiagnosis': selfDiagMap,
         'dailyEmotion': {
           'moodCheck': currentMood,
+          // [중요] 나중에 읽을 때를 대비해 AI 점수는 항상 Map 구조로 통일해서 저장
           'aiConversation': currentAi != null ? {'average': currentAi} : null,
         },
         'biometricStress': currentBio,

@@ -492,7 +492,9 @@ class EmotionTrackingTabState extends State<EmotionTrackingTab> {
             final startOfDay = DateTime(now.year, now.month, now.day);
             final endOfDay = startOfDay.add(const Duration(days: 1));
             filteredData = data.where((item) {
-              final timestamp = (item['timestamp'] as Timestamp).toDate();
+              final ts = item['timestamp'];
+              if (ts == null || ts is! Timestamp) return false;  // ✅ null 체크
+              final timestamp = ts.toDate();
               return timestamp.isAfter(startOfDay) && timestamp.isBefore(endOfDay);
             }).toList();
             break;
@@ -500,7 +502,9 @@ class EmotionTrackingTabState extends State<EmotionTrackingTab> {
             final startOfWeek = DateTime(now.year, now.month, now.day - (now.weekday - 1));
             final endOfWeek = startOfWeek.add(const Duration(days: 7));
             filteredData = data.where((item) {
-              final timestamp = (item['timestamp'] as Timestamp).toDate();
+              final ts = item['timestamp'];
+              if (ts == null || ts is! Timestamp) return false;  // ✅ null 체크
+              final timestamp = ts.toDate();
               return timestamp.isAfter(startOfWeek) && timestamp.isBefore(endOfWeek);
             }).toList();
             break;
@@ -508,7 +512,9 @@ class EmotionTrackingTabState extends State<EmotionTrackingTab> {
             final startOfMonth = DateTime(now.year, now.month, 1);
             final endOfMonth = DateTime(now.year, now.month + 1, 1);
             filteredData = data.where((item) {
-              final timestamp = (item['timestamp'] as Timestamp).toDate();
+              final ts = item['timestamp'];
+              if (ts == null || ts is! Timestamp) return false;  // ✅ null 체크
+              final timestamp = ts.toDate();
               return timestamp.isAfter(startOfMonth) && timestamp.isBefore(endOfMonth);
             }).toList();
             break;
@@ -718,23 +724,23 @@ class EmotionTrackingTabState extends State<EmotionTrackingTab> {
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _buildAverageSummaryItem(
-                    '평균 스트레스',
-                    _firestoreService.getMoodScoresStream(_currentUserId!),
-                    (data) => (data['score'] as num).toDouble(),
-                    '',
-                  ),
+                  '평균 스트레스',
+                  _firestoreService.getMoodScoresStream(_currentUserId!),
+                      (data) => (data['score'] as num?)?.toDouble() ?? 0.0,  // ✅
+                  '',
+                ),
                 _buildAverageSummaryItem(
-                    '평균 건강점수',
-                    _firestoreService.getMentalHealthScoresStream(_currentUserId!),
-                    (data) => (data['score'] as num).toDouble(),
-                    '',
-                  ),
+                  '평균 건강점수',
+                  _firestoreService.getMentalHealthScoresStream(_currentUserId!),
+                      (data) => (data['score'] as num?)?.toDouble() ?? 0.0,  // ✅
+                  '',
+                ),
                 _buildAverageSummaryItem(
-                    '평균 수면',
-                    _firestoreService.getSleepScoresStream(_currentUserId!),
-                    (data) => (data['duration'] as num).toDouble(),
-                    'h',
-                  ),
+                  '평균 수면',
+                  _firestoreService.getSleepScoresStream(_currentUserId!),
+                      (data) => (data['duration'] as num?)?.toDouble() ?? 0.0,  // ✅
+                  'h',
+                ),
               ],
             ),
           ] else
@@ -968,7 +974,7 @@ Widget _buildWeeklyMetricChart(String title, Color color, Stream<List<Map<String
         Text(
           label,
           style: GoogleFonts.roboto(
-            fontSize: 14,
+            fontSize: 12,  // ✅ 14 → 12로 줄임
             fontWeight: FontWeight.w400,
             color: const Color(0xFF6B7280),
           ),
@@ -980,7 +986,7 @@ Widget _buildWeeklyMetricChart(String title, Color color, Stream<List<Map<String
         Text(
           value,
           style: GoogleFonts.roboto(
-            fontSize: 18,
+            fontSize: 16,  // ✅ 18 → 16으로 줄임
             fontWeight: FontWeight.w700,
             color: const Color(0xFF1F2937),
           ),
@@ -1001,7 +1007,7 @@ Widget _buildWeeklyMetricChart(String title, Color color, Stream<List<Map<String
                 Text(
                   label,
                   style: GoogleFonts.roboto(
-                    fontSize: 14,
+                    fontSize: 12,  // ✅ 14 → 12로 줄임
                     fontWeight: FontWeight.w400,
                     color: const Color(0xFF6B7280),
                   ),
@@ -1011,8 +1017,8 @@ Widget _buildWeeklyMetricChart(String title, Color color, Stream<List<Map<String
                 ),
                 const SizedBox(height: 4),
                 const SizedBox(
-                  height: 18, // Text height
-                  width: 30,  // Placeholder width
+                  height: 16,
+                  width: 24,
                   child: CircularProgressIndicator(strokeWidth: 2),
                 ),
               ],
@@ -1047,9 +1053,35 @@ Widget _buildWeeklyMetricChart(String title, Color color, Stream<List<Map<String
             }
           }
 
+          // ✅ averageValue 정의 (이 부분이 중요!)
           String averageValue = count > 0 ? (totalScore / count).toStringAsFixed(1) : 'N/A';
 
-          return _buildSummaryItem(label, '$averageValue$unit');
+          // ✅ 폰트 크기 줄인 버전으로 직접 반환
+          return Column(
+            children: [
+              Text(
+                label,
+                style: GoogleFonts.roboto(
+                  fontSize: 12,  // ✅ 14 → 12로 줄임
+                  fontWeight: FontWeight.w400,
+                  color: const Color(0xFF6B7280),
+                ),
+                overflow: TextOverflow.ellipsis,
+                maxLines: 1,
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                '$averageValue$unit',
+                style: GoogleFonts.roboto(
+                  fontSize: 16,  // ✅ 18 → 16으로 줄임
+                  fontWeight: FontWeight.w700,
+                  color: const Color(0xFF1F2937),
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ],
+          );
         },
       ),
     );

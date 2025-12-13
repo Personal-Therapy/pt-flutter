@@ -149,22 +149,28 @@ class ProfileTabState extends State<ProfileTab> {
                     child: Icon(Icons.person, size: 30, color: kColorBtnPrimary),
                   ),
                   const SizedBox(width: 16),
-                  Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        userName,
-                        style: const TextStyle(
-                          fontSize: 18,
-                          fontWeight: FontWeight.w600,
+                  Expanded(  // ✅ 추가
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          userName,
+                          style: const TextStyle(
+                            fontSize: 18,
+                            fontWeight: FontWeight.w600,
+                          ),
+                          overflow: TextOverflow.ellipsis,  // ✅ 추가
+                          maxLines: 1,  // ✅ 추가
                         ),
-                      ),
-                      const SizedBox(height: 4),
-                      Text(
-                        'Personal Therapy와 함께한 지 ${daysWithApp}일',
-                        style: const TextStyle(fontSize: 14, color: kColorTextSubtitle),
-                      ),
-                    ],
+                        const SizedBox(height: 4),
+                        Text(
+                          'Personal Therapy와 함께한 지 ${daysWithApp}일',
+                          style: const TextStyle(fontSize: 14, color: kColorTextSubtitle),
+                          overflow: TextOverflow.ellipsis,  // ✅ 추가
+                          maxLines: 1,  // ✅ 추가
+                        ),
+                      ],
+                    ),
                   ),
                 ],
               ),
