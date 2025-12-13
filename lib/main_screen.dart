@@ -1,8 +1,10 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'dart:ui';
 import 'dart:io'; // Platform detection
 import 'package:google_fonts/google_fonts.dart';
-import 'package:firebase_auth/firebase_auth.dart';
+import 'package:untitled/profile_tab.dart';
+import 'package:untitled/wearable_device_screen.dart';
 
 // [!!] 파일 임포트 복구
 import 'package:untitled/wearable_device_screen.dart'; // 웨어러블 화면
@@ -47,9 +49,10 @@ final Map<String, String> kTexts = {
   'mood_analyze_button': '기분 분석하기',
   'mental_health_title': '정신건강 진단',
   'mental_health_subtitle': '전문적인 심리 상태\n체크',
-  // [복구] 웨어러블 텍스트로 원복
-  'wearable_device_title': '웨어러블 기기 연동',
-  'wearable_device_subtitle': '활동, 수면, 심박수\n데이터 연동',
+  // 'healing_content_title': '힐링 콘텐츠', // (제거됨)
+  // 'healing_content_subtitle': '맞춤형 치유\n콘텐츠', // (제거됨)
+  'wearable_device_title': '웨어러블 기기 연동', // [!!] 2.1 추가
+  'wearable_device_subtitle': '활동, 수면, 심박수\n데이터 연동', // [!!] 2.2 추가
   'today_healing_title': '오늘의 힐링',
   'today_healing_video_title': '5분 명상으로 마음 정리하기',
   'today_healing_video_description': '스트레스를 줄이고 마음의 평화를 찾는 간단한 명상법을 배워보세요.',
@@ -77,6 +80,9 @@ class MainScreenState extends State<MainScreen> {
   // [복구] 헬스 서비스 인스턴스 및 권한 요청 변수
   final HealthService _healthService = HealthService();
   bool _healthPermissionRequested = false;
+
+  // 뒤로가기 버튼 두 번 클릭으로 앱 종료
+  DateTime? _lastBackPressTime;
 
   @override
   void initState() {
@@ -157,14 +163,49 @@ class MainScreenState extends State<MainScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      extendBodyBehindAppBar: _selectedIndex == 0,
-      appBar: _selectedIndex == 0 ? _buildHomeAppBar() : null,
-      body: IndexedStack(
-        index: _selectedIndex,
-        children: _pages,
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) async {
+        if (didPop) return;
+
+        // 홈 탭이 아니면 홈 탭으로 이동
+        if (_selectedIndex != 0) {
+          setState(() {
+            _selectedIndex = 0;
+          });
+          return;
+        }
+
+        // 홈 탭에서 뒤로가기: 2초 이내 두 번 클릭 시 앱 종료
+        final now = DateTime.now();
+        if (_lastBackPressTime == null ||
+            now.difference(_lastBackPressTime!) > const Duration(seconds: 2)) {
+          _lastBackPressTime = now;
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text(
+                '한 번 더 누르면 종료됩니다',
+                style: GoogleFonts.roboto(),
+              ),
+              duration: const Duration(seconds: 2),
+              behavior: SnackBarBehavior.floating,
+            ),
+          );
+          return;
+        }
+
+        // 2초 이내 두 번째 클릭: 앱 종료
+        SystemNavigator.pop();
+      },
+      child: Scaffold(
+        extendBodyBehindAppBar: _selectedIndex == 0,
+        appBar: _selectedIndex == 0 ? _buildHomeAppBar() : null,
+        body: IndexedStack(
+          index: _selectedIndex,
+          children: _pages,
+        ),
+        bottomNavigationBar: _buildBottomNavigationBar(),
       ),
-      bottomNavigationBar: _buildBottomNavigationBar(),
     );
   }
 
@@ -174,10 +215,7 @@ class MainScreenState extends State<MainScreen> {
       child: AppBar(
         backgroundColor: Colors.transparent,
         elevation: 0,
-        leading: IconButton(
-          icon: const Icon(Icons.arrow_back, color: kColorTextSubtitle),
-          onPressed: () => Navigator.pop(context),
-        ),
+        automaticallyImplyLeading: false, // 뒤로가기 버튼 제거
         title: Text(
           'Personal Therapy',
           style: GoogleFonts.pacifico(
@@ -310,40 +348,39 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
                 const SizedBox(height: 24.0),
 
                 Row(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     Expanded(
-                      child: SizedBox(
-                        height: 190,
-                        child: InkWell(
-                          borderRadius: BorderRadius.circular(16.0),
-                          onTap: () {
-                            Navigator.push(
-                              context,
-                              MaterialPageRoute(
-                                builder: (context) => const DiagnosisScreen(),
-                              ),
-                            );
-                          },
-                          child: _buildSmallFeatureCard(
-                            iconWidget: Image.asset(
-                              'assets/images/heart_pulse_icon.png',
-                              width: 48.0,
-                              height: 48.0,
-                              errorBuilder: (context, error, stackTrace) =>
-                              const Icon(Icons.error_outline,
-                                  color: kColorError, size: 48.0),
+                      child: InkWell(
+                        borderRadius: BorderRadius.circular(16.0),
+                        onTap: () {
+                          Navigator.push(
+                            context,
+                            MaterialPageRoute(
+                              builder: (context) => const DiagnosisScreen(),
                             ),
-                            title: kTexts['mental_health_title']!,
-                            subtitle: kTexts['mental_health_subtitle']!,
+                          );
+                        },
+                        child: _buildSmallFeatureCard(
+                          iconWidget: Image.asset(
+                            'assets/images/heart_pulse_icon.png',
+                            width: 48.0,
+                            height: 48.0,
+                            errorBuilder: (context, error, stackTrace) =>
+                            const Icon(Icons.error_outline,
+                                color: kColorError, size: 48.0),
                           ),
+                          title: kTexts['mental_health_title']!,
+                          subtitle: kTexts['mental_health_subtitle']!,
                         ),
                       ),
                     ),
-                    const SizedBox(width: 16.0),
-                    // [복구] 힐링 콘텐츠 -> 웨어러블 기기 카드로 복구
+                    const SizedBox(width: 5.0),
+// [!!!] 2. '힐링 콘텐츠' 카드를 InkWell로 감쌉니다. [!!!]
+                    // [!!!] 3. '힐링 콘텐츠' 카드를 '웨어러블 기기'로 수정 [!!!]
                     Expanded(
                       child: InkWell(
-                        // 웨어러블 스크린으로 이동
+                        // [!!] 3.1 힐링 스크린 -> 웨어러블 스크린으로 이동
                         onTap: () {
                           Navigator.push(
                             context,
@@ -352,10 +389,16 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
                         },
                         borderRadius: BorderRadius.circular(16.0),
                         child: _buildSmallFeatureCard(
-                          // 아이콘 변경 (시계 아이콘)
-                          iconWidget: const Icon(Icons.watch,
-                              color: kColorBtnPrimary, size: 48.0),
-                          // 텍스트 키 변경
+                          // [!!] 3.2 아이콘 변경 (시계 아이콘 예시)
+                          iconWidget: Image.asset(
+                            'assets/images/icon_watch.png', // 👈 이 경로는 예시입니다.
+                            width: 30.0,
+                            height: 30.0,
+                            errorBuilder: (context, error, stackTrace) =>
+                            const Icon(Icons.watch, // 👈 대체 아이콘
+                                color: kColorError, size: 48.0),
+                          ),
+                          // [!!] 3.3 텍스트 키 변경
                           title: kTexts['wearable_device_title']!,
                           subtitle: kTexts['wearable_device_subtitle']!,
                         ),
