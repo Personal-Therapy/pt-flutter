@@ -22,3 +22,19 @@ subprojects {
 tasks.register<Delete>("clean") {
     delete(rootProject.layout.buildDirectory)
 }
+subprojects {
+    if (name == "flutter_wear_os_connectivity") {
+        val configureNamespace = {
+            extensions.configure<com.android.build.gradle.LibraryExtension> {
+                // [수정됨] mjohnsullivan -> sstonn 으로 변경
+                namespace = "com.sstonn.flutter_wear_os_connectivity"
+            }
+        }
+
+        if (state.executed) {
+            configureNamespace()
+        } else {
+            afterEvaluate { configureNamespace() }
+        }
+    }
+}

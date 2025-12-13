@@ -825,4 +825,80 @@ class HealthService {
       return [];
     }
   }
+
+  // ===== Wear OS HRV Data Integration =====
+
+  /// 워치 앱으로부터 최신 HRV 데이터 가져오기
+  ///
+  /// Returns: {
+  ///   "rmssd": double,
+  ///   "avgHeartRate": int,
+  ///   "timestamp": int (milliseconds),
+  ///   "formattedTime": String
+  /// } or null if no data available
+  Future<Map<String, dynamic>?> getLatestHrvDataFromWatch() async {
+    if (!Platform.isAndroid) {
+      print('⚠️ Wear OS HRV는 Android에서만 사용 가능합니다');
+      return null;
+    }
+
+    try {
+      final result = await _samsungHealthChannel.invokeMethod('getLatestHrvData');
+
+      if (result != null && result is Map) {
+        final data = Map<String, dynamic>.from(result);
+        print('✅ 워치로부터 HRV 데이터 수신:');
+        print('   RMSSD: ${data['rmssd']} ms');
+        print('   Avg HR: ${data['avgHeartRate']} bpm');
+        print('   Time: ${data['formattedTime']}');
+        return data;
+      } else {
+        print('ℹ️ 워치로부터 수신된 HRV 데이터가 없습니다');
+        return null;
+      }
+    } catch (e) {
+      print('❌ 워치 HRV 데이터 가져오기 실패: $e');
+      return null;
+    }
+  }
+
+  /// 워치 HRV 데이터를 Firestore에 저장
+  ///
+  /// [userId] - 사용자 ID
+  /// [hrvData] - getLatestHrvDataFromWatch()에서 반환된 데이터
+  Future<void> saveWatchHrvToFirestore(String userId, Map<String, dynamic> hrvData) async {
+    try {
+      final timestamp = DateTime.fromMillisecondsSinceEpoch(hrvData['timestamp'] as int);
+
+      await FirebaseFirestore.instance
+          .collection('users')
+          .doc(userId)
+          .collection('hrv_records')
+          .add({
+        'rmssd': hrvData['rmssd'],
+        'avgHeartRate': hrvData['avgHeartRate'],
+        'timestamp': Timestamp.fromDate(timestamp),
+        'source': 'wear_os_watch',
+        'formattedTime': hrvData['formattedTime'],
+      });
+
+      print('✅ 워치 HRV 데이터 Firestore 저장 완료');
+    } catch (e) {
+      print('❌ 워치 HRV 데이터 저장 실패: $e');
+      rethrow;
+    }
+  }
+
+  /// 워치 HRV 데이터 스트림 (실시간 업데이트)
+  ///
+  /// 주기적으로 워치로부터 새 데이터를 폴링하고 스트림으로 전달
+  Stream<Map<String, dynamic>?> watchHrvDataStream({
+    Duration pollInterval = const Duration(seconds: 30),
+  }) async* {
+    while (true) {
+      final data = await getLatestHrvDataFromWatch();
+      yield data;
+      await Future.delayed(pollInterval);
+    }
+  }
 }
