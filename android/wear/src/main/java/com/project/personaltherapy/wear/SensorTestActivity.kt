@@ -1,4 +1,4 @@
-package com.project.personaltherapy.wear
+package com.project.personaltherapy
 
 import android.hardware.Sensor
 import android.hardware.SensorManager

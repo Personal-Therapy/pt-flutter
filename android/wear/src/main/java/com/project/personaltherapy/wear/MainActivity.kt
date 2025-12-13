@@ -1,4 +1,4 @@
-package com.project.personaltherapy.wear
+package com.project.personaltherapy
 
 import android.Manifest
 import android.content.Intent

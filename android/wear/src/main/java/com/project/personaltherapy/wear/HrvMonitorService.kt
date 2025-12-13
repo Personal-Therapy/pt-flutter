@@ -1,4 +1,4 @@
-package com.project.personaltherapy.wear
+package com.project.personaltherapy
 
 import android.app.Notification
 import android.app.NotificationChannel

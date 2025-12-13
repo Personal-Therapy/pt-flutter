@@ -4,11 +4,11 @@ plugins {
 }
 
 android {
-    namespace = "com.project.personaltherapy.wear"
+    namespace = "com.project.personaltherapy"
     compileSdk = 34
 
     defaultConfig {
-        applicationId = "com.project.personaltherapy.wear"
+        applicationId = "com.project.personaltherapy"
         minSdk = 30  // Wear OS 3.0+ (Health Services 필수)
         targetSdk = 34
         versionCode = 1
