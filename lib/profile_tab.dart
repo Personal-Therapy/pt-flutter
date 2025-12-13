@@ -11,7 +11,7 @@ import 'personal_info_screen.dart';
 import 'health_result_page.dart';
 
 // ---------------------------------------------------------------------------
-// [수정] 주석을 풀고 색상을 명확하게 정의했습니다. (오류 해결 핵심)
+// 색상 정의
 // ---------------------------------------------------------------------------
 const Color kColorBtnPrimary = Color(0xFF2563EB);
 const Color kColorCardBg = Colors.white;
@@ -114,7 +114,7 @@ class ProfileTabState extends State<ProfileTab> {
     );
   }
 
-  // 사용자 스탯 카드
+  // 사용자 스탯 카드 (통계 부분 제거됨)
   Widget _buildUserStatsCard() {
     return _buildCardContainer(
       child: StreamBuilder<Map<String, dynamic>?>(
@@ -134,9 +134,6 @@ class ProfileTabState extends State<ProfileTab> {
           final userName = userData['name'] ?? '사용자님';
           final userCreationDate = (userData['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
           final daysWithApp = DateTime.now().difference(userCreationDate).inDays;
-          final conversationCount = (userData['conversationCount'] ?? 0).toString();
-          final averageHealthScore = (userData['averageHealthScore'] ?? 0).toString();
-          final healingContentCount = (userData['healingContentCount'] ?? 0).toString();
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -149,7 +146,7 @@ class ProfileTabState extends State<ProfileTab> {
                     child: Icon(Icons.person, size: 30, color: kColorBtnPrimary),
                   ),
                   const SizedBox(width: 16),
-                  Expanded(  // ✅ 추가
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -159,65 +156,26 @@ class ProfileTabState extends State<ProfileTab> {
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
                           ),
-                          overflow: TextOverflow.ellipsis,  // ✅ 추가
-                          maxLines: 1,  // ✅ 추가
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                         ),
                         const SizedBox(height: 4),
                         Text(
                           'Personal Therapy와 함께한 지 ${daysWithApp}일',
                           style: const TextStyle(fontSize: 14, color: kColorTextSubtitle),
-                          overflow: TextOverflow.ellipsis,  // ✅ 추가
-                          maxLines: 1,  // ✅ 추가
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                         ),
                       ],
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
-              Divider(color: Colors.grey[200]),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: Center(
-                      child: _buildStatItem('대화 횟수', conversationCount, kColorBtnPrimary),
-                    ),
-                  ),
-                  Expanded(
-                    child: Center(
-                      child: _buildStatItem('평균 건강 점수', averageHealthScore, kPrimaryGreen),
-                    ),
-                  ),
-                  Expanded(
-                    child: Center(
-                      child: _buildStatItem('힐링 콘텐츠', healingContentCount, kPrimaryPurple),
-                    ),
-                  ),
-                ],
-              ),
+              // 하단 통계 부분 제거됨
             ],
           );
         },
       ),
-    );
-  }
-
-  // 스탯 아이템
-  Widget _buildStatItem(String title, String value, Color color) {
-    return Column(
-      children: [
-        Text(title, style: TextStyle(fontSize: 12, color: kColorTextSubtitle)),
-        SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-      ],
     );
   }
 
