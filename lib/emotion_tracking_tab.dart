@@ -195,42 +195,138 @@ class EmotionTrackingTabState extends State<EmotionTrackingTab> {
 
   /// 오늘의 감정 분포 카드
   Widget _buildDailyEmotionDistributionCard() {
-    return Container(
-      padding: const EdgeInsets.all(24.0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16.0),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 2,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '오늘의 감정 분포',
-            style: GoogleFonts.roboto(
-              fontWeight: FontWeight.w500,
-              fontSize: 14,
-              color: const Color(0xFF1F2937),
+    if (_currentUserId == null) {
+      return const Center(child: Text('로그인이 필요합니다.'));
+    }
+
+    // 💡 FirestoreService에서 AI 챗 점수 스트림을 가져옵니다.
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _firestoreService.getAIChatScoresStream(_currentUserId!),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          // 로딩 중일 때 로딩 카드를 표시합니다.
+          // (파일에 정의된 _buildLoadingCard가 있다고 가정합니다.)
+          // return _buildLoadingCard();
+          return Container(
+            padding: const EdgeInsets.all(24.0),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16.0),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 2,
+                  offset: const Offset(0, 1),
+                ),
+              ],
             ),
+            child: const Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final allChatData = snapshot.data ?? [];
+        final now = DateTime.now();
+        final startOfDay = DateTime(now.year, now.month, now.day);
+
+        // 1. 오늘 기록만 필터링 (timestamp가 오늘 00:00:00 이후인 데이터)
+        final todayData = allChatData.where((item) {
+          final ts = item['timestamp'];
+          if (ts == null || ts is! Timestamp) return false;
+          final timestamp = ts.toDate();
+          return timestamp.isAfter(startOfDay);
+        }).toList();
+
+        // 2. 감정 점수 집계
+        Map<String, int> dailyEmotions = {
+          'joy': 0, 'sadness': 0, 'anger': 0, 'anxiety': 0, 'peace': 0,
+        };
+
+        // 각 감정의 총합을 저장하는 변수
+        Map<String, int> emotionSums = Map.from(dailyEmotions);
+
+        // 오늘 기록된 대화 횟수
+        final chatCount = todayData.length;
+
+        if (chatCount > 0) {
+          // 1단계: 모든 대화의 감정 점수를 합산
+          for (var item in todayData) {
+            final emotions = item['emotions'] as Map<String, dynamic>?;
+            if (emotions != null) {
+              emotions.forEach((key, value) {
+                if (emotionSums.containsKey(key)) {
+                  // 저장된 점수를 누적
+                  emotionSums[key] = (emotionSums[key] ?? 0) + (value as num).toInt();
+                }
+              });
+            }
+          }
+          // 2단계: 합산된 점수를 대화 횟수로 나누어 평균을 계산
+          emotionSums.forEach((key, sum) {
+            // 평균을 계산하고, 소수점 없이 정수로 반올림하여 저장
+            dailyEmotions[key] = (sum / chatCount).round();
+          });
+        }
+
+        final totalScore = dailyEmotions.values.fold<int>(0, (sum, score) => sum + score);
+
+        // 3. 비율 및 퍼센트 계산 헬퍼 함수
+        double getRatio(String emotionKey) {
+          if (totalScore == 0) return 0.0;
+          return (dailyEmotions[emotionKey] ?? 0) / totalScore;
+        }
+
+        String getPercentage(String emotionKey) {
+          if (totalScore == 0) return '0%';
+          final ratio = getRatio(emotionKey);
+          return '${(ratio * 100).round()}%';
+        }
+
+        return Container(
+          padding: const EdgeInsets.all(24.0),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16.0),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 2,
+                offset: const Offset(0, 1),
+              ),
+            ],
           ),
-          const SizedBox(height: 12.0),
-          _buildEmotionProgress('기쁨', 0.0, const Color(0xFF22C55E), '0%'),
-          const SizedBox(height: 12.0),
-          _buildEmotionProgress('슬픔', 0.0, const Color(0xFF3B82F6), '0%'),
-          const SizedBox(height: 12.0),
-          _buildEmotionProgress('불안', 0.0, const Color(0xFFEAB308), '0%'),
-          const SizedBox(height: 12.0),
-          _buildEmotionProgress('분노', 0.0, const Color(0xFFEF4444), '0%'),
-          const SizedBox(height: 12.0),
-          _buildEmotionProgress('평온', 0.0, const Color(0xFF6B7280), '0%'),
-        ],
-      ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '오늘의 감정 분포',
+                style: GoogleFonts.roboto(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 14,
+                  color: const Color(0xFF1F2937),
+                ),
+              ),
+              const SizedBox(height: 12.0),
+              // 4. 집계된 감정 데이터 표시
+              if (totalScore == 0)
+                const Center(child: Text('오늘의 AI 대화 기록이 없어 감정 분포를 표시할 수 없습니다.'))
+              else
+                Column(
+                  children: [
+                    _buildEmotionProgress('기쁨', getRatio('joy'), const Color(0xFF22C55E), getPercentage('joy')),
+                    const SizedBox(height: 12.0),
+                    _buildEmotionProgress('슬픔', getRatio('sadness'), const Color(0xFF3B82F6), getPercentage('sadness')),
+                    const SizedBox(height: 12.0),
+                    _buildEmotionProgress('불안', getRatio('anxiety'), const Color(0xFFEAB308), getPercentage('anxiety')),
+                    const SizedBox(height: 12.0),
+                    _buildEmotionProgress('분노', getRatio('anger'), const Color(0xFFEF4444), getPercentage('anger')),
+                    const SizedBox(height: 12.0),
+                    _buildEmotionProgress('평온', getRatio('peace'), const Color(0xFF6B7280), getPercentage('peace')),
+                  ],
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 

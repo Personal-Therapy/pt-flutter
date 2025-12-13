@@ -121,11 +121,17 @@ class FirestoreService {
         .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
   }
 
-  // [신규] AI Chat 감정 분석 점수 저장 및 집계 업데이트
-  Future<void> updateAIChatScore(String uid, int aiScore) async {
+// [신규] AI Chat 감정 분석 점수 저장 및 집계 업데이트 (수정됨: 감정 데이터 추가)
+  Future<void> updateAIChatScore(
+      String uid,
+      int aiScore, {
+        // 💡 Map<String, int> 타입의 감정 데이터를 받도록 추가
+        required Map<String, int> emotions,
+      }) async {
     // 1. AI 분석 기록 저장
     await _db.collection('users').doc(uid).collection('ai_chat_scores').add({
       'score': aiScore,
+      'emotions': emotions, // 💡 감정 데이터 저장
       'timestamp': FieldValue.serverTimestamp(),
     });
 
@@ -390,6 +396,15 @@ class FirestoreService {
   Stream<List<Map<String, dynamic>>> getDailyMentalStatusListStream(String uid) {
     return _db.collection('users').doc(uid).collection('daily_mental_status')
         .orderBy('date', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
+  }
+
+  // AI Chat 감정 분석 점수 전체 리스트 가져오기 (감정 분포 계산에 사용)
+  Stream<List<Map<String, dynamic>>> getAIChatScoresStream(String uid) {
+    // timestamp를 기준으로 내림차순 정렬하여 모든 AI 챗 스코어 기록을 가져옵니다.
+    return _db.collection('users').doc(uid).collection('ai_chat_scores')
+        .orderBy('timestamp', descending: true)
         .snapshots()
         .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
   }

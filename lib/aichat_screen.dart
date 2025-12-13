@@ -286,17 +286,19 @@ $userMessage
       debugPrint('[SCORE] 최종 점수: ${analysis.finalScoreB3.round()} / 100');
 
       // Firestore에 B-3 방식 점수 저장
+      // Firestore에 B-3 방식 점수 저장
       final userId = FirebaseAuth.instance.currentUser?.uid;
       if (userId != null) {
         final firestoreService = FirestoreService();
-
-        // [수정됨] 직접 updateDailyMentalStatus를 부르지 않고,
-        // 헬퍼 함수인 updateAIChatScore를 호출하여 로그 저장 + 점수 집계를 동시에 수행합니다.
         int aiScore = analysis.finalScoreB3.round();
 
-        await firestoreService.updateAIChatScore(userId, aiScore);
-
-        debugPrint('[AI_CHAT] Firestore 저장 완료! AI 점수: $aiScore');
+        // 💡 수정: 감정 데이터(analysis.emotions)를 함께 전달합니다.
+        await firestoreService.updateAIChatScore(
+          userId,
+          aiScore,
+          emotions: analysis.emotions.cast<String, int>(), // FirestoreService에 맞춰 명시적으로 캐스팅
+        );
+        debugPrint('[AI_CHAT] Firestore 저장 완료! AI 점수: $aiScore, 감정: ${analysis.emotions}');
       }
 
       setState(() {
