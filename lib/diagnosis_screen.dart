@@ -600,6 +600,7 @@ class _SurveyScreenState extends State<SurveyScreen> {
 
   // 5. _handleSubmit 함수
   void _handleSubmit() async {
+    // 1. 답변 확인
     if (_answers.any((answer) => answer == null)) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(
@@ -615,74 +616,61 @@ class _SurveyScreenState extends State<SurveyScreen> {
     });
 
     try {
+      // 2. 총점 계산 (예: 10개 문항 * 1~5점 = 10 ~ 50점 범위)
       int totalScore = _answers.fold(0, (sum, score) => sum + (score ?? 0));
 
-      // 점수 평가 로직 호출
+      // 3. 결과 텍스트 생성 (UI 표시용)
       TestResult result = _evaluateTest(widget.title, totalScore);
 
+      // 4. Firestore 저장 호출
       if (_currentUserId != null) {
+        // Service가 내부적으로 점수 환산(0~100) 및 종합 점수 업데이트를 수행합니다.
         await _firestoreService.updateMentalHealthScore(
-            _currentUserId!, widget.title, result.score);
-        // Optionally show a snackbar for successful save, but dialog will show result
+            _currentUserId!,
+            widget.title,
+            totalScore // 원본 점수(10~50)를 넘김
+        );
+        print('✅ [Diagnosis] ${widget.title} 점수 저장 완료 및 종합 점수 업데이트 트리거됨');
       } else {
-        // Handle case where user is not logged in
         ScaffoldMessenger.of(context).showSnackBar(
           const SnackBar(content: Text('로그인이 필요합니다. 점수는 저장되지 않습니다.')),
         );
       }
 
-      // 수정된 다이얼로그 표시
+      // 5. 다이얼로그 표시 (기존 코드 유지)
       showDialog(
         context: context,
-        barrierDismissible: false, // 바깥 영역 터치로 닫기 방지
+        barrierDismissible: false,
         builder: (context) => AlertDialog(
+          // ... (기존 다이얼로그 코드 그대로 유지) ...
           title: Text(widget.title),
-          content: SingleChildScrollView( // 내용이 길어질 수 있으므로 스크롤
+          content: SingleChildScrollView(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               mainAxisSize: MainAxisSize.min,
               children: [
-                // 결과 타이틀
                 Text(
                   result.title,
                   style: GoogleFonts.roboto(
                     fontSize: 20,
                     fontWeight: FontWeight.bold,
-                    color: result.color, // 파일 상단에 정의된 색상
+                    color: result.color,
                   ),
                 ),
                 const SizedBox(height: 8),
-                // 총점
                 Text(
                   '총점: ${result.score}점',
                   style: GoogleFonts.roboto(
                     fontSize: 14,
-                    color: kColorTextSubtitle, // 파일 상단에 정의된 색상
+                    color: kColorTextSubtitle,
                   ),
                 ),
                 const Divider(height: 24),
-                // 결과 설명
-                Text(
-                  result.description,
-                  style: GoogleFonts.roboto(
-                    fontSize: 14,
-                    color: kColorTextLabel, // 파일 상단에 정의된 색상
-                    height: 1.5,
-                  ),
-                ),
+                Text(result.description, style: GoogleFonts.roboto(fontSize: 14, color: kColorTextLabel, height: 1.5)),
                 const SizedBox(height: 12),
-                // 조언
-                Text(
-                  result.advice,
-                  style: GoogleFonts.roboto(
-                    fontSize: 14,
-                    color: kColorTextLabel, // 파일 상단에 정의된 색상
-                    height: 1.5,
-                  ),
-                ),
+                Text(result.advice, style: GoogleFonts.roboto(fontSize: 14, color: kColorTextLabel, height: 1.5)),
                 const SizedBox(height: 20),
-                // 하단 주의사항
-                _buildDialogNoticeCard(), // 위에서 만든 함수 호출
+                _buildDialogNoticeCard(),
               ],
             ),
           ),
@@ -690,12 +678,17 @@ class _SurveyScreenState extends State<SurveyScreen> {
             TextButton(
               onPressed: () {
                 Navigator.pop(context); // 다이얼로그 닫기
-                Navigator.pop(context); // 검사 페이지 닫기 (메인으로 이동)
+                Navigator.pop(context); // 목록 화면으로 돌아가기
               },
-              child: Text('확인'),
+              child: const Text('확인'),
             ),
           ],
         ),
+      );
+    } catch (e) {
+      print('❌ [Diagnosis] 저장 중 오류 발생: $e');
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('저장 중 오류가 발생했습니다: $e')),
       );
     } finally {
       setState(() {

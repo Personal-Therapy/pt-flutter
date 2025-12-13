@@ -4,6 +4,7 @@ import 'dart:io'; // Platform detection
 import 'package:untitled/main_screen.dart'; // Import main_screen.dart to use its color constants
 import 'package:untitled/services/health_service.dart';
 import 'package:firebase_auth/firebase_auth.dart';
+import 'package:untitled/services/firestore_service.dart'; // 이 줄을 추가하세요
 
 // [!!] 1. 새 RTF 파일에서 추가된 색상
 const Color kConnectedGreen = Color(0xFF21C45D); // "연결됨"
@@ -23,6 +24,7 @@ class WearableDeviceScreen extends StatefulWidget {
 
 class _WearableDeviceScreenState extends State<WearableDeviceScreen> {
   final HealthService _healthService = HealthService();
+  final FirestoreService _firestoreService = FirestoreService();
   final String? _currentUserId = FirebaseAuth.instance.currentUser?.uid;
 
   Timer? _dataUpdateTimer;
@@ -175,14 +177,13 @@ class _WearableDeviceScreenState extends State<WearableDeviceScreen> {
   }
 
   /// Health 데이터 새로고침
+  // [수정] 데이터 새로고침 및 Firestore 저장 연결
   Future<void> _refreshHealthData() async {
     try {
       final now = DateTime.now();
 
-      // 1. 오늘 하루 전체 데이터 가져오기 (걸음 수, 칼로리)
+      // 1. HealthService에서 데이터 가져오기 (기존 코드)
       final healthData = await _healthService.fetchRecentHealthData();
-
-      // 2. 현재 시간대의 평균 심박수 가져오기 (지난 1시간)
       final oneHourAgo = now.subtract(const Duration(hours: 1));
       final avgHeartData = await _healthService.fetchAverageHeartData(
         startTime: oneHourAgo,
@@ -192,31 +193,37 @@ class _WearableDeviceScreenState extends State<WearableDeviceScreen> {
       setState(() {
         _steps = healthData['steps'] ?? 0;
         _activeCalories = healthData['activeCalories'] ?? 0.0;
-
-        // 평균 심박수 사용 (지난 1시간)
         _currentHR = avgHeartData['avgHR'];
         _currentHRV = avgHeartData['avgHRV'];
         _restingHR = healthData['restingHR'];
-
-        print('📊 실시간 모니터링: 심박수=${_currentHR}, HRV=${_currentHRV} (지난 1시간 평균)');
       });
 
-      // 사용자 상태 분석
-      _analyzeUserState();
+      // 2. 사용자 상태 및 스트레스 분석 (기존 코드)
+      _analyzeUserState(); // 이 함수가 _currentStress 값을 업데이트함
 
-      // Firestore에 저장
+      // 3. [중요] Firestore에 생체 점수 저장
       final userId = _currentUserId;
-      if (userId != null && _currentHR != null) {
+      if (userId != null) {
+        // A. 기존 방식의 로그 저장 (선택 사항)
         await _healthService.saveHealthDataToFirestore(userId, {
           'steps': _steps,
           'activeCalories': _activeCalories,
           'heartRate': _currentHR,
           'hrv': _currentHRV,
           'restingHR': _restingHR,
-          'stressLevel': _currentStress,
+          'stressLevel': _currentStress, // 원본 스트레스 지수 (높을수록 나쁨)
           'userState': _userState,
           'timestamp': now,
         });
+
+        // B. [신규] 종합 점수 산출을 위한 점수 저장
+        // 스트레스(0~100, 높을수록 나쁨) -> 건강점수(0~100, 높을수록 좋음)로 변환
+        // 예: 스트레스 80 -> 건강점수 20
+        int bioHealthScore = (100 - _currentStress).clamp(0, 100);
+
+        await _firestoreService.updateBiometricStress(userId, bioHealthScore);
+
+        print('✅ [Wearable] 생체 점수 업데이트 완료: 스트레스 $_currentStress -> 건강점수 $bioHealthScore');
       }
     } catch (e) {
       print('데이터 새로고침 실패: $e');

@@ -289,11 +289,14 @@ $userMessage
       final userId = FirebaseAuth.instance.currentUser?.uid;
       if (userId != null) {
         final firestoreService = FirestoreService();
-        await firestoreService.updateDailyMentalStatus(
-          uid: userId,
-          aiConversationScore: analysis.finalScoreB3.round(),
-        );
-        debugPrint('[AI_CHAT] Firestore 저장 완료! 점수: ${analysis.finalScoreB3.round()}');
+
+        // [수정됨] 직접 updateDailyMentalStatus를 부르지 않고,
+        // 헬퍼 함수인 updateAIChatScore를 호출하여 로그 저장 + 점수 집계를 동시에 수행합니다.
+        int aiScore = analysis.finalScoreB3.round();
+
+        await firestoreService.updateAIChatScore(userId, aiScore);
+
+        debugPrint('[AI_CHAT] Firestore 저장 완료! AI 점수: $aiScore');
       }
 
       setState(() {

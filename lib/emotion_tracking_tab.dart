@@ -166,6 +166,7 @@ class EmotionTrackingTabState extends State<EmotionTrackingTab> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                // [1] 스트레스 (기존 유지)
                 _buildStreamedStatusItem(
                   stream: _firestoreService.getMoodScoresStream(_currentUserId!),
                   label: '스트레스',
@@ -174,12 +175,14 @@ class EmotionTrackingTabState extends State<EmotionTrackingTab> {
                   scoreExtractor: (data) => (data['score'] as num?)?.toDouble() ?? 0.0,
                   isStress: true,
                 ),
+                // [2] 건강 점수 (수정됨!) -> 종합 점수(overallScore)를 가져오도록 변경
                 _buildStreamedStatusItem(
-                  stream: _firestoreService.getMentalHealthScoresStream(_currentUserId!),
-                  label: '건강 점수',
+                  stream: _firestoreService.getDailyMentalStatusListStream(_currentUserId!), // [변경]
+                  label: '종합 건강 점수', // [변경] 라벨을 명확하게
                   valueColor: const Color(0xFF2563EB),
                   timePeriod: 'daily',
-                  scoreExtractor: (data) => (data['score'] as num?)?.toDouble() ?? 0.0,
+                  // [변경] 'overallScore' 필드를 읽도록 수정
+                  scoreExtractor: (data) => (data['overallScore'] as num?)?.toDouble() ?? 0.0,
                 ),
               ],
             )
@@ -418,20 +421,23 @@ class EmotionTrackingTabState extends State<EmotionTrackingTab> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                // [1] 스트레스 (기존 유지)
                 _buildStreamedStatusItem(
                   stream: _firestoreService.getMoodScoresStream(_currentUserId!),
-                  label: '스트레스',
+                  label: '평균 스트레스',
                   valueColor: const Color(0xFF1F2937),
                   timePeriod: 'weekly',
                   scoreExtractor: (data) => (data['score'] as num?)?.toDouble() ?? 0.0,
                   isStress: true,
                 ),
+                // [2] 건강 점수 (수정됨!)
                 _buildStreamedStatusItem(
-                  stream: _firestoreService.getMentalHealthScoresStream(_currentUserId!),
-                  label: '건강 점수',
+                  stream: _firestoreService.getDailyMentalStatusListStream(_currentUserId!), // [변경]
+                  label: '평균 건강 점수',
                   valueColor: const Color(0xFF2563EB),
                   timePeriod: 'weekly',
-                  scoreExtractor: (data) => (data['score'] as num?)?.toDouble() ?? 0.0,
+                  // [변경] 'overallScore' 필드를 읽도록 수정
+                  scoreExtractor: (data) => (data['overallScore'] as num?)?.toDouble() ?? 0.0,
                 ),
               ],
             )
@@ -1282,6 +1288,7 @@ Widget _buildWeeklyMetricChart(String title, Color color, Stream<List<Map<String
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
+                // [1] 스트레스 (기존 유지)
                 _buildStreamedStatusItem(
                   stream: _firestoreService.getMoodScoresStream(_currentUserId!),
                   label: '스트레스',
@@ -1290,13 +1297,16 @@ Widget _buildWeeklyMetricChart(String title, Color color, Stream<List<Map<String
                   scoreExtractor: (data) => (data['score'] as num?)?.toDouble() ?? 0.0,
                   isStress: true,
                 ),
+                // [2] 건강 점수 (수정됨!)
                 _buildStreamedStatusItem(
-                  stream: _firestoreService.getMentalHealthScoresStream(_currentUserId!),
+                  stream: _firestoreService.getDailyMentalStatusListStream(_currentUserId!), // [변경]
                   label: '건강 점수',
                   valueColor: const Color(0xFF2563EB),
                   timePeriod: 'monthly',
-                  scoreExtractor: (data) => (data['score'] as num?)?.toDouble() ?? 0.0,
+                  // [변경] 'overallScore' 필드를 읽도록 수정
+                  scoreExtractor: (data) => (data['overallScore'] as num?)?.toDouble() ?? 0.0,
                 ),
+                // [3] 수면 시간 (기존 유지)
                 _buildStreamedStatusItem(
                   stream: _firestoreService.getSleepScoresStream(_currentUserId!),
                   label: '수면 시간',

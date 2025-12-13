@@ -1,31 +1,33 @@
 import 'package:flutter/material.dart';
-import 'package:firebase_auth/firebase_auth.dart'; // Add this import
-import 'package:untitled/services/firestore_service.dart'; // Add this import
-import 'package:untitled/main_screen.dart'; // Import main_screen.dart for shared color constants
-import 'package:cloud_firestore/cloud_firestore.dart'; // Add this import
-import 'package:health/health.dart'; // Add this import
+import 'package:firebase_auth/firebase_auth.dart';
+import 'package:untitled/services/firestore_service.dart';
+import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:health/health.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-import 'add_contact_sheet.dart'; // [!!] 팝업창 위젯 import
-import 'personal_info_screen.dart'; // [!!] 1. 새로 만든 페이지 import
+// [!!] 필요한 파일들 import
+import 'add_contact_sheet.dart';
+import 'personal_info_screen.dart';
 import 'health_result_page.dart';
 
-// [주의] MainScreen에서 이미 모든 Health 권한을 요청했으므로,
-// 이 파일에서는 권한 요청 없이 데이터만 가져옵니다.
+// ---------------------------------------------------------------------------
+// [수정] 주석을 풀고 색상을 명확하게 정의했습니다. (오류 해결 핵심)
+// ---------------------------------------------------------------------------
+const Color kColorBtnPrimary = Color(0xFF2563EB);
+const Color kColorCardBg = Colors.white;
+const Color kColorTextTitle = Color(0xFF1F2937);
+const Color kColorTextSubtitle = Color(0xFF4B5563);
+const Color kColorMoodSliderInactive = Color(0xFFD1D5DB);
+const Color kColorError = Color(0xFFEF4444);
 
-// RTF 파일에서 정의된 색상 상수 (주석 처리 또는 main_screen.dart에서 가져옴)
-// const Color kPageBackground = Color(0xFFF9FAFB); // Use kColorBgStart
-// const Color kCardBackground = Color(0xFFFFFFFF); // Use kColorCardBg
-// const Color kColorBtnPrimary = Color(0xFF2563EB); // Use kColorBtnPrimary
-const Color kPrimaryGreen = Color(0xFF16A34A); // This color seems unique to this file for now
+// 이 파일에서만 쓰이는 추가 색상들
+const Color kPrimaryGreen = Color(0xFF16A34A);
 const Color kPrimaryPurple = Color(0xFF9333EA);
-const Color kColorError = Color(0xFFDC2626); // Use kColorError (or define a specific red if different)
 const Color kDarkRed = Color(0xFFB91C1C);
-// const Color kDisabledGrey = Color(0xFFE5E7EB); // Use kColorMoodSliderInactive
-// const Color kColorTextTitle = Color(0xFF111827); // Use kColorTextTitle
-// const Color kColorTextSubtitle = Color(0xFF6B7280); // Use kColorTextSubtitle
 
-// [!!] 연락처 데이터를 관리할 클래스(모델)를 정의합니다.
+// ---------------------------------------------------------------------------
+
+// 연락처 데이터 모델
 class EmergencyContact {
   String name;
   String phone;
@@ -44,7 +46,6 @@ class EmergencyContact {
   });
 }
 
-// 프로필 탭
 class ProfileTab extends StatefulWidget {
   const ProfileTab({super.key});
 
@@ -57,7 +58,6 @@ class ProfileTabState extends State<ProfileTab> {
   final String? _currentUserId = FirebaseAuth.instance.currentUser?.uid;
   final Health _health = Health();
   int _stepCount = 0;
-  final TextEditingController _sleepTimeController = TextEditingController();
 
   @override
   void initState() {
@@ -66,7 +66,6 @@ class ProfileTabState extends State<ProfileTab> {
   }
 
   /// 걸음 수 데이터 가져오기
-  /// [주의] MainScreen에서 이미 권한을 요청했으므로 여기서는 데이터만 가져옵니다.
   Future<void> _fetchStepData() async {
     try {
       final now = DateTime.now();
@@ -87,8 +86,6 @@ class ProfileTabState extends State<ProfileTab> {
             });
           }
         }
-      } else {
-        print('⚠️ 걸음 수 권한이 없습니다. MainScreen에서 권한을 요청하세요.');
       }
     } catch (e) {
       print('걸음 수 데이터 가져오기 실패: $e');
@@ -144,7 +141,6 @@ class ProfileTabState extends State<ProfileTab> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // ✅ 프로필 정보 (기존 그대로 유지)
               Row(
                 children: [
                   CircleAvatar(
@@ -172,12 +168,9 @@ class ProfileTabState extends State<ProfileTab> {
                   ),
                 ],
               ),
-
               const SizedBox(height: 20),
               Divider(color: Colors.grey[200]),
               const SizedBox(height: 16),
-
-              // ✅ 통계는 이 Row 하나만!
               Row(
                 children: [
                   Expanded(
@@ -199,13 +192,12 @@ class ProfileTabState extends State<ProfileTab> {
               ),
             ],
           );
-
         },
       ),
     );
   }
 
-  // 스탯 아이템 (기존과 동일)
+  // 스탯 아이템
   Widget _buildStatItem(String title, String value, Color color) {
     return Column(
       children: [
@@ -223,7 +215,7 @@ class ProfileTabState extends State<ProfileTab> {
     );
   }
 
-  // ✅ 나의 상태 카드
+  // 나의 상태 카드
   Widget _buildHealthStatusCard(BuildContext context) {
     return _buildCardContainer(
       child: Column(
@@ -255,13 +247,12 @@ class ProfileTabState extends State<ProfileTab> {
                   const SizedBox(width: 8),
                   ElevatedButton(
                     onPressed: () {
-                      // 현재 사용자 데이터 가져오기
                       _firestoreService.getUserStream(_currentUserId!).first.then((userData) {
                         if (userData != null) {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => HealthResultPage(userData: userData),
+                              builder: (_) => HealthResultPage(), // userData 넘기지 않음 (페이지 내부에서 stream으로 조회)
                             ),
                           );
                         }
@@ -291,15 +282,10 @@ class ProfileTabState extends State<ProfileTab> {
               if (snapshot.connectionState == ConnectionState.waiting) {
                 return const Center(child: CircularProgressIndicator());
               }
-              if (snapshot.hasError) {
-                return Center(child: Text('Error: ${snapshot.error}'));
-              }
-              if (!snapshot.hasData || snapshot.data == null) {
-                return const Center(child: Text('사용자 데이터를 불러올 수 없습니다.'));
-              }
-              final userData = snapshot.data!;
+              final userData = snapshot.data ?? {};
+              // 여기서는 평균 점수(users 컬렉션)를 보여줄지, 오늘 점수(daily)를 보여줄지 결정해야 함.
+              // 일단 기존대로 averageHealthScore 표시
               final healthScore = (userData['averageHealthScore'] ?? 'N/A').toString();
-              // final sleepTime = userData['sleepTime'] as String? ?? 'N/A'; // 기존 코드 주석 처리 또는 제거
 
               return Row(
                 mainAxisAlignment: MainAxisAlignment.spaceAround,
@@ -311,24 +297,15 @@ class ProfileTabState extends State<ProfileTab> {
                       child: StreamBuilder<List<Map<String, dynamic>>>(
                         stream: _currentUserId != null ? _firestoreService.getSleepScoresStream(_currentUserId!) : null,
                         builder: (context, sleepSnapshot) {
-                          print('StreamBuilder - ConnectionState: ${sleepSnapshot.connectionState}');
-                          print('StreamBuilder - HasError: ${sleepSnapshot.hasError}');
-                          if (sleepSnapshot.hasData) {
-                            print('StreamBuilder - Sleep Data: ${sleepSnapshot.data}');
-                          }
-                          
                           if (sleepSnapshot.connectionState == ConnectionState.waiting) {
                             return const StatusItem(icon: Icons.hotel, title: '수면 시간', value: '...');
                           }
-                          if (sleepSnapshot.hasError) {
-                            return const StatusItem(icon: Icons.hotel, title: '수면 시간', value: '오류');
-                          }
-                          
+
                           List<Map<String, dynamic>> sleepData = sleepSnapshot.data ?? [];
                           double totalDuration = 0.0;
                           int count = 0;
 
-                          // 최근 7일간의 평균 수면 시간 계산 로직 (emotion_tracking_tab.dart 재활용)
+                          // 최근 7일간의 평균 수면 시간 계산
                           final now = DateTime.now();
                           final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
                           final endOfWeek = startOfWeek.add(const Duration(days: 6));
@@ -344,9 +321,7 @@ class ProfileTabState extends State<ProfileTab> {
                             try {
                               totalDuration += (record['duration'] as num).toDouble();
                               count++;
-                            } catch (e) {
-                              // 오류 처리
-                            }
+                            } catch (e) { }
                           }
 
                           String averageSleep = count > 0 ? (totalDuration / count).toStringAsFixed(1) : 'N/A';
@@ -404,32 +379,21 @@ class ProfileTabState extends State<ProfileTab> {
           actions: <Widget>[
             TextButton(
               child: const Text('취소'),
-              onPressed: () {
-                Navigator.of(context).pop();
-              },
+              onPressed: () => Navigator.of(context).pop(),
             ),
             TextButton(
               child: const Text('저장'),
               onPressed: () async {
                 if (_currentUserId != null) {
-                  print('현재 사용자 UID: $_currentUserId'); // 디버그 로그 추가
-                  print('수면 시간 저장 시도: $_currentSliderValue 시간'); // 저장 시도 로그
                   try {
                     await _firestoreService.addSleepRecord(
                         _currentUserId!, _currentSliderValue);
-                    print('수면 시간 저장 성공: $_currentSliderValue 시간'); // 저장 성공 로그
-                    Navigator.of(context).pop(); // 성공 시에만 팝업 닫기
+                    Navigator.of(context).pop();
                   } catch (e) {
-                    print('수면 시간 저장 실패: $e'); // 저장 실패 로그
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text('수면 시간 저장에 실패했습니다: ${e.toString()}')),
+                      SnackBar(content: Text('저장 실패: $e')),
                     );
                   }
-                } else {
-                  print('오류: _currentUserId가 null입니다.'); // 디버그 로그 추가
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('로그인 정보가 없어 수면 시간을 저장할 수 없습니다. 다시 로그인해주세요.')),
-                  );
                 }
               },
             ),
@@ -439,13 +403,10 @@ class ProfileTabState extends State<ProfileTab> {
     );
   }
 
-
-  // --- 2. 안심 연락망 카드 ---
+  // 안심 연락망 카드
   Widget _buildEmergencyContactsCard(BuildContext context) {
     if (_currentUserId == null) {
-      return _buildCardContainer(
-        child: const Center(child: Text('로그인이 필요합니다.')),
-      );
+      return _buildCardContainer(child: const Center(child: Text('로그인이 필요합니다.')));
     }
 
     return _buildCardContainer(
@@ -455,10 +416,6 @@ class ProfileTabState extends State<ProfileTab> {
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
           }
-          if (snapshot.hasError) {
-            return Center(child: Text('오류: ${snapshot.error}'));
-          }
-
           final contacts = snapshot.data ?? [];
 
           return Column(
@@ -467,7 +424,7 @@ class ProfileTabState extends State<ProfileTab> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
+                  const Text(
                     '안심 연락망',
                     style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
                   ),
@@ -475,17 +432,17 @@ class ProfileTabState extends State<ProfileTab> {
                     onTap: contacts.length >= 3
                         ? null
                         : () {
-                            _showAddContactModal(context, contacts: contacts);
-                          },
+                      _showAddContactModal(context, contacts: contacts);
+                    },
                     child: CircleAvatar(
                       radius: 16,
                       backgroundColor: contacts.length >= 3
-                          ? Color(0xFFE5E7EB)
-                          : Color(0xFFDBEAFE),
+                          ? const Color(0xFFE5E7EB)
+                          : const Color(0xFFDBEAFE),
                       child: Icon(
                         Icons.add,
                         color: contacts.length >= 3
-                            ? Color(0xFF9CA3AF)
+                            ? const Color(0xFF9CA3AF)
                             : kColorBtnPrimary,
                         size: 20,
                       ),
@@ -493,16 +450,14 @@ class ProfileTabState extends State<ProfileTab> {
                   ),
                 ],
               ),
-              SizedBox(height: 8),
+              const SizedBox(height: 8),
               Text(
                 '위기 상황 감지 시 알림을 받을 연락처를 설정하세요. (${contacts.length}/3)',
-                style: TextStyle(fontSize: 14, color: kColorTextSubtitle),
+                style: const TextStyle(fontSize: 14, color: kColorTextSubtitle),
               ),
-              SizedBox(height: 20),
-
-              // 연락처 목록
+              const SizedBox(height: 20),
               if (contacts.isEmpty)
-                Center(
+                const Center(
                   child: Text(
                     '등록된 연락처가 없습니다.',
                     style: TextStyle(color: kColorTextSubtitle),
@@ -527,11 +482,6 @@ class ProfileTabState extends State<ProfileTab> {
                       },
                       onDelete: () async {
                         await _firestoreService.deleteEmergencyContact(_currentUserId!, index);
-                        if (context.mounted) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('연락처가 삭제되었습니다')),
-                          );
-                        }
                       },
                     );
                   }).toList(),
@@ -543,13 +493,12 @@ class ProfileTabState extends State<ProfileTab> {
     );
   }
 
-  // 팝업 띄우기 함수
   void _showAddContactModal(
-    BuildContext context, {
-    required List<Map<String, dynamic>> contacts,
-    int? editIndex,
-    Map<String, dynamic>? existingContact,
-  }) {
+      BuildContext context, {
+        required List<Map<String, dynamic>> contacts,
+        int? editIndex,
+        Map<String, dynamic>? existingContact,
+      }) {
     showModalBottomSheet(
       context: context,
       backgroundColor: Colors.transparent,
@@ -558,63 +507,27 @@ class ProfileTabState extends State<ProfileTab> {
         return AddContactBottomSheet(
           contact: existingContact != null
               ? EmergencyContact(
-                  name: existingContact['name'] ?? '',
-                  phone: existingContact['phone'] ?? '',
-                  tag: existingContact['tag'] ?? '',
-                  icon: Icons.person,
-                  bgColor: Color(0xFFE0E7FF),
-                  iconColor: Color(0xFF4338CA),
-                )
+            name: existingContact['name'] ?? '',
+            phone: existingContact['phone'] ?? '',
+            tag: existingContact['tag'] ?? '',
+            icon: Icons.person,
+            bgColor: const Color(0xFFE0E7FF),
+            iconColor: const Color(0xFF4338CA),
+          )
               : null,
           onSave: (String name, String phone, String tag) async {
             if (_currentUserId == null) return;
-
-            final contactData = {
-              'name': name,
-              'phone': phone,
-              'tag': tag,
-            };
-
+            final contactData = {'name': name, 'phone': phone, 'tag': tag};
             try {
               if (editIndex != null) {
-                // 수정 모드
-                await _firestoreService.updateEmergencyContact(
-                  _currentUserId!,
-                  editIndex,
-                  contactData,
-                );
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('연락처가 수정되었습니다')),
-                  );
-                }
+                await _firestoreService.updateEmergencyContact(_currentUserId!, editIndex, contactData);
               } else {
-                // 추가 모드
-                if (contacts.length >= 3) {
-                  if (context.mounted) {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('최대 3개까지만 등록할 수 있습니다')),
-                    );
-                  }
-                  return;
-                }
-                await _firestoreService.addEmergencyContact(
-                  _currentUserId!,
-                  contactData,
-                );
-                if (context.mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(content: Text('연락처가 추가되었습니다')),
-                  );
-                }
+                if (contacts.length >= 3) return;
+                await _firestoreService.addEmergencyContact(_currentUserId!, contactData);
               }
               Navigator.pop(context);
             } catch (e) {
-              if (context.mounted) {
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text('오류가 발생했습니다: $e')),
-                );
-              }
+              // 에러 처리
             }
           },
         );
@@ -622,7 +535,7 @@ class ProfileTabState extends State<ProfileTab> {
     );
   }
 
-  // --- 3. 알림 설정 카드 (기존과 동일) ---
+  // 알림 설정 카드
   Widget _buildNotificationSettingsCard() {
     return StatefulBuilder(
       builder: (context, setState) {
@@ -636,25 +549,25 @@ class ProfileTabState extends State<ProfileTab> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              Text(
+              const Text(
                 '알림 설정',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
               ),
-              SizedBox(height: 16),
+              const SizedBox(height: 16),
               _buildSwitchItem(
                 '감정 기록 알림',
                 toggles['감정 기록 알림']!,
-                (value) => setState(() => toggles['감정 기록 알림'] = value),
+                    (value) => setState(() => toggles['감정 기록 알림'] = value),
               ),
               _buildSwitchItem(
                 '위기 감지 알림',
                 toggles['위기 감지 알림']!,
-                (value) => setState(() => toggles['위기 감지 알림'] = value),
+                    (value) => setState(() => toggles['위기 감지 알림'] = value),
               ),
               _buildSwitchItem(
                 '힐링 콘텐츠 알림',
                 toggles['힐링 콘텐츠 알림']!,
-                (value) => setState(() => toggles['힐링 콘텐츠 알림'] = value),
+                    (value) => setState(() => toggles['힐링 콘텐츠 알림'] = value),
               ),
             ],
           ),
@@ -663,31 +576,22 @@ class ProfileTabState extends State<ProfileTab> {
     );
   }
 
-  // 3. 계정 설정 카드
+  // 계정 설정 카드
   Widget _buildAccountCard() {
     VoidCallback navigateToSettings = () {
       if (_currentUserId == null) return;
-
       final email = FirebaseAuth.instance.currentUser?.email ?? '';
-
-      _firestoreService
-          .getUserStream(_currentUserId!)
-          .first
-          .then((userData) {
+      _firestoreService.getUserStream(_currentUserId!).first.then((userData) {
         if (userData != null && context.mounted) {
           Navigator.push(
             context,
             MaterialPageRoute(
-              builder: (_) => PersonalInfoScreen(
-                userData: userData,
-                email: email,
-              ),
+              builder: (_) => PersonalInfoScreen(userData: userData, email: email),
             ),
           );
         }
       });
     };
-
 
     return _buildCardContainer(
       child: Column(
@@ -702,7 +606,7 @@ class ProfileTabState extends State<ProfileTab> {
             icon: Icons.lock_person,
             iconColor: kColorBtnPrimary,
             text: '개인정보 설정',
-            onTap: navigateToSettings, // 여기서 실행
+            onTap: navigateToSettings,
           ),
           const SizedBox(height: 8),
           _buildMenuItem(
@@ -718,8 +622,7 @@ class ProfileTabState extends State<ProfileTab> {
     );
   }
 
-
-  // --- 5. 회원 탈퇴 카드 (기존과 동일, 버튼 스타일 수정) ---
+  // 회원 탈퇴 카드
   Widget _buildDeleteAccountCard() {
     return _buildCardContainer(
       child: Column(
@@ -727,58 +630,55 @@ class ProfileTabState extends State<ProfileTab> {
         children: [
           Row(
             children: [
-              Icon(Icons.warning_amber, color: kColorError, size: 24),
-              SizedBox(width: 8),
-              Text(
+              const Icon(Icons.warning_amber, color: kColorError, size: 24),
+              const SizedBox(width: 8),
+              const Text(
                 '회원 탈퇴',
                 style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
               ),
             ],
           ),
-          SizedBox(height: 8),
-          Text(
-            '계정을 삭제하면... 모든 데이터가 영구적으로 삭제...',
+          const SizedBox(height: 8),
+          const Text(
+            '계정을 삭제하면 모든 데이터가 영구적으로 삭제됩니다.',
             style: TextStyle(fontSize: 14, color: kDarkRed),
           ),
-          SizedBox(height: 16),
+          const SizedBox(height: 16),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: kColorError, // primary -> backgroundColor
-              foregroundColor: Colors.white, // onPrimary -> foregroundColor
-              minimumSize: Size(double.infinity, 48),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
+              backgroundColor: kColorError,
+              foregroundColor: Colors.white,
+              minimumSize: const Size(double.infinity, 48),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
             ),
-            onPressed: () {},
-            child: Text('생명의전화 1393'),
+            onPressed: () {}, // 탈퇴 로직 필요
+            child: const Text('생명의전화 1393'),
           ),
-          SizedBox(height: 12),
+          const SizedBox(height: 12),
           ElevatedButton(
             style: ElevatedButton.styleFrom(
-              backgroundColor: Color(0xFFF3F4F6), // primary -> backgroundColor
-              foregroundColor: kColorTextSubtitle, // onPrimary -> foregroundColor
-              minimumSize: Size(double.infinity, 48),
-              shape: RoundedRectangleBorder(
-                borderRadius: BorderRadius.circular(8),
-              ),
+              backgroundColor: const Color(0xFFF3F4F6),
+              foregroundColor: kColorTextSubtitle,
+              minimumSize: const Size(double.infinity, 48),
+              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
               elevation: 0,
             ),
-            onPressed: () {},
-            child: Text('회원 탈퇴'),
+            onPressed: () {}, // 탈퇴 로직 필요
+            child: const Text('회원 탈퇴'),
           ),
         ],
       ),
     );
   }
 
-  // --- 헬퍼 위젯들 ---
+  // -------------------------------------------------------------------------
+  // 헬퍼 위젯들
+  // -------------------------------------------------------------------------
 
-  // 공통 카드 컨테이너 (기존과 동일)
   Widget _buildCardContainer({required Widget child}) {
     return Container(
       width: double.infinity,
-      padding: EdgeInsets.all(16),
+      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: kColorCardBg,
         borderRadius: BorderRadius.circular(16),
@@ -787,7 +687,6 @@ class ProfileTabState extends State<ProfileTab> {
     );
   }
 
-  // 연락처 아이템 헬퍼
   Widget _buildContactItem({
     required String name,
     required String phone,
@@ -795,7 +694,6 @@ class ProfileTabState extends State<ProfileTab> {
     required VoidCallback onEdit,
     required VoidCallback onDelete,
   }) {
-    // 태그에 따라 아이콘과 색상 결정
     IconData icon;
     Color bgColor;
     Color iconColor;
@@ -803,23 +701,23 @@ class ProfileTabState extends State<ProfileTab> {
     switch (tag) {
       case '가족':
         icon = Icons.family_restroom;
-        bgColor = Color(0xFFFEE2E2);
-        iconColor = Color(0xFFDC2626);
+        bgColor = const Color(0xFFFEE2E2);
+        iconColor = const Color(0xFFDC2626);
         break;
       case '친구':
         icon = Icons.people;
-        bgColor = Color(0xFFD1FAE5);
-        iconColor = Color(0xFF16A34A);
+        bgColor = const Color(0xFFD1FAE5);
+        iconColor = const Color(0xFF16A34A);
         break;
       case '상담사':
         icon = Icons.support_agent;
-        bgColor = Color(0xFFFEF3C7);
-        iconColor = Color(0xFFD97706);
+        bgColor = const Color(0xFFFEF3C7);
+        iconColor = const Color(0xFFD97706);
         break;
       default:
         icon = Icons.person;
-        bgColor = Color(0xFFE0E7FF);
-        iconColor = Color(0xFF4338CA);
+        bgColor = const Color(0xFFE0E7FF);
+        iconColor = const Color(0xFF4338CA);
     }
 
     return Padding(
@@ -831,29 +729,26 @@ class ProfileTabState extends State<ProfileTab> {
             backgroundColor: bgColor,
             child: Icon(icon, color: iconColor, size: 20),
           ),
-          SizedBox(width: 12),
+          const SizedBox(width: 12),
           Expanded(
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
-                Text(name, style: TextStyle(fontWeight: FontWeight.w600)),
-                Text(
-                  '$phone · $tag',
-                  style: TextStyle(color: kColorTextSubtitle),
-                ),
+                Text(name, style: const TextStyle(fontWeight: FontWeight.w600)),
+                Text('$phone · $tag', style: const TextStyle(color: kColorTextSubtitle)),
               ],
             ),
           ),
           IconButton(
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
-            icon: Icon(Icons.edit, color: kColorTextSubtitle, size: 20),
+            icon: const Icon(Icons.edit, color: kColorTextSubtitle, size: 20),
             onPressed: onEdit,
           ),
           IconButton(
             padding: EdgeInsets.zero,
             constraints: const BoxConstraints(),
-            icon: Icon(Icons.delete, color: kColorError, size: 20),
+            icon: const Icon(Icons.delete, color: kColorError, size: 20),
             onPressed: onDelete,
           ),
         ],
@@ -861,14 +756,13 @@ class ProfileTabState extends State<ProfileTab> {
     );
   }
 
-  // 스위치 아이템 (기존과 동일)
   Widget _buildSwitchItem(String title, bool value, Function(bool) onChanged) {
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 8.0),
       child: Row(
         mainAxisAlignment: MainAxisAlignment.spaceBetween,
         children: [
-          Text(title, style: TextStyle(fontSize: 16)),
+          Text(title, style: const TextStyle(fontSize: 16)),
           Switch(
             value: value,
             onChanged: onChanged,
@@ -880,32 +774,31 @@ class ProfileTabState extends State<ProfileTab> {
     );
   }
 
-  // [!!] 7. 계정 메뉴 아이템 헬퍼 (수정됨)
   Widget _buildMenuItem({
     required IconData icon,
     required Color iconColor,
     required String text,
-    required VoidCallback onTap, // [!!] 8. onTap 파라미터 추가
+    required VoidCallback onTap,
   }) {
-    // [!!] 9. InkWell로 감싸서 탭 가능하게 만듦
     return InkWell(
       onTap: onTap,
-      borderRadius: BorderRadius.circular(8.0), // 물결 효과 범위
+      borderRadius: BorderRadius.circular(8.0),
       child: Padding(
         padding: const EdgeInsets.symmetric(vertical: 12.0),
         child: Row(
           children: [
             Icon(icon, color: iconColor, size: 20),
-            SizedBox(width: 12),
-            Expanded(child: Text(text, style: TextStyle(fontSize: 16))),
-            Icon(Icons.arrow_forward_ios, size: 16, color: kColorTextSubtitle),
+            const SizedBox(width: 12),
+            Expanded(child: Text(text, style: const TextStyle(fontSize: 16))),
+            const Icon(Icons.arrow_forward_ios, size: 16, color: kColorTextSubtitle),
           ],
         ),
       ),
     );
   }
-} // [!!] _ProfileTabState 끝
+}
 
+// 상태 아이템 위젯
 class StatusItem extends StatelessWidget {
   final IconData icon;
   final String title;
