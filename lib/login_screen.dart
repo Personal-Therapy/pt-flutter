@@ -4,6 +4,7 @@ import 'package:untitled/signup_screen.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:google_sign_in/google_sign_in.dart';
 
+import 'package:untitled/services/firestore_service.dart';
 import 'forgot_password_screen.dart';
 
 // --- Color Definitions ---
@@ -29,6 +30,7 @@ class LoginScreen extends StatefulWidget {
 }
 
 class LoginScreenState extends State<LoginScreen> {
+  final FirestoreService _firestoreService = FirestoreService();
   bool _stayLoggedIn = false;
   bool _passwordVisible = false;
 
@@ -158,9 +160,14 @@ class LoginScreenState extends State<LoginScreen> {
       );
 
       // 4. Firebase로 로그인
-      await FirebaseAuth.instance.signInWithCredential(credential);
+      final userCredential = await FirebaseAuth.instance.signInWithCredential(credential);
 
-      print("Google 로그인 성공");
+      // 5. Firestore에 사용자 정보 저장/업데이트
+      if (userCredential.user != null) {
+        await _firestoreService.upsertGoogleUser(userCredential.user!);
+      }
+
+      print("Google 로그인 성공 및 Firestore 업데이트 완료");
 
     } catch (e) {
       print("Google 로그인 오류: $e");

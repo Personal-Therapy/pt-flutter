@@ -4,6 +4,7 @@ import 'package:untitled/auth_wrapper.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:untitled/firebase_options.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
+import 'package:flutter_localizations/flutter_localizations.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -24,14 +25,20 @@ class MyApp extends StatelessWidget {
   Widget build(BuildContext context) {
     return MaterialApp(
       title: 'Personal Therapy',
-
-      // (디버그 배너 제거)
       debugShowCheckedModeBanner: false,
+
+      localizationsDelegates: const [
+        GlobalMaterialLocalizations.delegate,
+        GlobalWidgetsLocalizations.delegate,
+        GlobalCupertinoLocalizations.delegate,
+      ],
+      supportedLocales: const [
+        Locale('ko'),
+        Locale('en'),
+      ],
 
       theme: ThemeData(
         primarySwatch: Colors.blue,
-
-        // (추가) 앱 전반의 기본 폰트를 Roboto로 설정 (추천)
         textTheme: GoogleFonts.robotoTextTheme(
           Theme.of(context).textTheme,
         ),

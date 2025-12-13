@@ -144,11 +144,12 @@ class ProfileTabState extends State<ProfileTab> {
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              // ✅ 프로필 정보 (기존 그대로 유지)
               Row(
                 children: [
                   CircleAvatar(
                     radius: 32,
-                    backgroundColor: Color(0xFFDBEAFE),
+                    backgroundColor: const Color(0xFFDBEAFE),
                     child: Icon(Icons.person, size: 30, color: kColorBtnPrimary),
                   ),
                   const SizedBox(width: 16),
@@ -157,34 +158,68 @@ class ProfileTabState extends State<ProfileTab> {
                     children: [
                       Text(
                         userName,
-                        style: TextStyle(
+                        style: const TextStyle(
                           fontSize: 18,
                           fontWeight: FontWeight.w600,
-                          color: kColorTextTitle,
                         ),
                       ),
-                      SizedBox(height: 4),
+                      const SizedBox(height: 4),
                       Text(
                         'Personal Therapy와 함께한 지 ${daysWithApp}일',
-                        style: TextStyle(fontSize: 14, color: kColorTextSubtitle),
+                        style: const TextStyle(fontSize: 14, color: kColorTextSubtitle),
                       ),
                     ],
                   ),
                 ],
               ),
-              Divider(height: 32, color: Colors.grey[200]),
+
+              const SizedBox(height: 20),
+              Divider(color: Colors.grey[200]),
+              const SizedBox(height: 16),
+
+              // ✅ 통계는 이 Row 하나만!
               Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
                 children: [
-                  _buildStatItem('대화 횟수', conversationCount, kColorBtnPrimary),
-                  _buildStatItem('평균 건강점수', averageHealthScore, kPrimaryGreen),
-                  _buildStatItem('힐링 콘텐츠', healingContentCount, kPrimaryPurple),
+                  Expanded(
+                    child: Center(
+                      child: _buildStatItem('대화 횟수', conversationCount, kColorBtnPrimary),
+                    ),
+                  ),
+                  Expanded(
+                    child: Center(
+                      child: _buildStatItem('평균 건강 점수', averageHealthScore, kPrimaryGreen),
+                    ),
+                  ),
+                  Expanded(
+                    child: Center(
+                      child: _buildStatItem('힐링 콘텐츠', healingContentCount, kPrimaryPurple),
+                    ),
+                  ),
                 ],
               ),
             ],
           );
+
         },
       ),
+    );
+  }
+
+  // 스탯 아이템 (기존과 동일)
+  Widget _buildStatItem(String title, String value, Color color) {
+    return Column(
+      children: [
+        Text(title, style: TextStyle(fontSize: 12, color: kColorTextSubtitle)),
+        SizedBox(height: 4),
+        Text(
+          value,
+          style: TextStyle(
+            fontSize: 24,
+            fontWeight: FontWeight.bold,
+            color: color,
+          ),
+        ),
+      ],
     );
   }
 
@@ -628,36 +663,51 @@ class ProfileTabState extends State<ProfileTab> {
     );
   }
 
-  // [!!] 3. 계정 설정 카드 (수정됨) ---
+  // 3. 계정 설정 카드
   Widget _buildAccountCard() {
-    // [!!] 4. 공통으로 사용할 내비게이션 로직 정의
     VoidCallback navigateToSettings = () {
-      Navigator.push(
-        context,
-        MaterialPageRoute(builder: (context) => const PersonalInfoScreen()),
-      );
+      if (_currentUserId == null) return;
+
+      final email = FirebaseAuth.instance.currentUser?.email ?? '';
+
+      _firestoreService
+          .getUserStream(_currentUserId!)
+          .first
+          .then((userData) {
+        if (userData != null && context.mounted) {
+          Navigator.push(
+            context,
+            MaterialPageRoute(
+              builder: (_) => PersonalInfoScreen(
+                userData: userData,
+                email: email,
+              ),
+            ),
+          );
+        }
+      });
     };
+
 
     return _buildCardContainer(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          Text(
+          const Text(
             '계정',
             style: TextStyle(fontSize: 18, fontWeight: FontWeight.w600),
           ),
-          SizedBox(height: 16),
-          // [!!] 5. onTap 핸들러를 전달하도록 _buildMenuItem 수정
+          const SizedBox(height: 16),
           _buildMenuItem(
             icon: Icons.lock_person,
             iconColor: kColorBtnPrimary,
             text: '개인정보 설정',
-            onTap: navigateToSettings, // [!!] 6. 내비게이션 로직 전달
+            onTap: navigateToSettings, // 여기서 실행
           ),
-          SizedBox(height: 8), // Add some spacing
+          const SizedBox(height: 8),
           _buildMenuItem(
             icon: Icons.logout,
-            iconColor: kColorError, // Use a red color for logout
+            iconColor: kColorError,
             text: '로그아웃',
             onTap: () async {
               await FirebaseAuth.instance.signOut();
@@ -667,6 +717,7 @@ class ProfileTabState extends State<ProfileTab> {
       ),
     );
   }
+
 
   // --- 5. 회원 탈퇴 카드 (기존과 동일, 버튼 스타일 수정) ---
   Widget _buildDeleteAccountCard() {
@@ -736,24 +787,6 @@ class ProfileTabState extends State<ProfileTab> {
     );
   }
 
-  // 스탯 아이템 (기존과 동일)
-  Widget _buildStatItem(String title, String value, Color color) {
-    return Column(
-      children: [
-        Text(title, style: TextStyle(fontSize: 12, color: kColorTextSubtitle)),
-        SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-      ],
-    );
-  }
-
   // 연락처 아이템 헬퍼
   Widget _buildContactItem({
     required String name,
@@ -812,10 +845,14 @@ class ProfileTabState extends State<ProfileTab> {
             ),
           ),
           IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
             icon: Icon(Icons.edit, color: kColorTextSubtitle, size: 20),
             onPressed: onEdit,
           ),
           IconButton(
+            padding: EdgeInsets.zero,
+            constraints: const BoxConstraints(),
             icon: Icon(Icons.delete, color: kColorError, size: 20),
             onPressed: onDelete,
           ),

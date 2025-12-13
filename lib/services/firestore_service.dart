@@ -1,4 +1,5 @@
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 
 class FirestoreService {
   final FirebaseFirestore _db = FirebaseFirestore.instance;
@@ -28,6 +29,32 @@ class FirestoreService {
       }
       return null;
     });
+  }
+
+  // Create or update user data from Google Sign-In
+  Future<void> upsertGoogleUser(User user) async {
+    final userRef = _db.collection('users').doc(user.uid);
+    final doc = await userRef.get();
+
+    if (!doc.exists) {
+      // If user is new, create document with all default fields
+      await userRef.set({
+        'uid': user.uid,
+        'name': user.displayName ?? '사용자', // Provide a default name
+        'email': user.email,
+        'photoURL': user.photoURL,
+        'createdAt': FieldValue.serverTimestamp(),
+        'conversationCount': 0,
+        'averageHealthScore': 0,
+        'healingContentCount': 0,
+      });
+    } else {
+      // If user exists, just update name and photoURL
+      await userRef.update({
+        'name': user.displayName,
+        'photoURL': user.photoURL,
+      });
+    }
   }
 
   // Update user mood score
