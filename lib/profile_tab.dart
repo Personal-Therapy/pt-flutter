@@ -216,7 +216,7 @@ class ProfileTabState extends State<ProfileTab> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => HealthResultPage(), // userData 넘기지 않음 (페이지 내부에서 stream으로 조회)
+                              builder: (_) => HealthResultPage(),
                             ),
                           );
                         }
@@ -240,71 +240,141 @@ class ProfileTabState extends State<ProfileTab> {
             ],
           ),
           const SizedBox(height: 16),
-          StreamBuilder<Map<String, dynamic>?>(
-            stream: _currentUserId != null ? _firestoreService.getUserStream(_currentUserId!) : null,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              final userData = snapshot.data ?? {};
-              // 여기서는 평균 점수(users 컬렉션)를 보여줄지, 오늘 점수(daily)를 보여줄지 결정해야 함.
-              // 일단 기존대로 averageHealthScore 표시
-              final healthScore = (userData['averageHealthScore'] ?? 'N/A').toString();
+          // ✅ 수정: 건강 점수, 수면 시간, 걸음 수를 Firestore에서 가져오기
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              // 1. 건강 점수 (정신건강 종합 점수 - overallScore)
+              Expanded(
+                child: StreamBuilder<List<Map<String, dynamic>>>(
+                  stream: _currentUserId != null
+                      ? _firestoreService.getDailyMentalStatusListStream(_currentUserId!)
+                      : null,
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const StatusItem(icon: Icons.favorite, title: '건강 점수', value: '...');
+                    }
 
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  Expanded(child: StatusItem(icon: Icons.favorite, title: '건강 점수', value: healthScore)),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => _showSleepTimeInputDialog(context),
-                      child: StreamBuilder<List<Map<String, dynamic>>>(
-                        stream: _currentUserId != null ? _firestoreService.getSleepScoresStream(_currentUserId!) : null,
-                        builder: (context, sleepSnapshot) {
-                          if (sleepSnapshot.connectionState == ConnectionState.waiting) {
-                            return const StatusItem(icon: Icons.hotel, title: '수면 시간', value: '...');
-                          }
+                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                      return const StatusItem(icon: Icons.favorite, title: '건강 점수', value: 'N/A');
+                    }
 
-                          List<Map<String, dynamic>> sleepData = sleepSnapshot.data ?? [];
-                          double totalDuration = 0.0;
-                          int count = 0;
+                    // 오늘 날짜의 최신 데이터 가져오기
+                    final now = DateTime.now();
+                    final startOfDay = DateTime(now.year, now.month, now.day);
 
-                          // 최근 7일간의 평균 수면 시간 계산
-                          final now = DateTime.now();
-                          final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
-                          final endOfWeek = startOfWeek.add(const Duration(days: 6));
+                    final todayData = snapshot.data!.where((item) {
+                      final ts = item['timestamp'];
+                      if (ts == null || ts is! Timestamp) return false;
+                      final timestamp = ts.toDate();
+                      return timestamp.isAfter(startOfDay);
+                    }).toList();
 
-                          final filteredData = sleepData.where((record) {
-                            final timestamp = record['timestamp'] as Timestamp?;
-                            return timestamp != null &&
-                                timestamp.toDate().isAfter(startOfWeek.subtract(const Duration(days: 1))) &&
-                                timestamp.toDate().isBefore(endOfWeek.add(const Duration(days: 1)));
-                          }).toList();
+                    if (todayData.isEmpty) {
+                      // 오늘 데이터가 없으면 가장 최근 데이터 사용
+                      final latestData = snapshot.data!.last;
+                      final score = (latestData['overallScore'] as num?)?.toInt() ?? 0;
+                      return StatusItem(icon: Icons.favorite, title: '건강 점수', value: '$score');
+                    }
 
-                          for (var record in filteredData) {
-                            try {
-                              totalDuration += (record['duration'] as num).toDouble();
-                              count++;
-                            } catch (e) { }
-                          }
+                    // 오늘의 가장 최근 점수
+                    final latestTodayData = todayData.last;
+                    final score = (latestTodayData['overallScore'] as num?)?.toInt() ?? 0;
+                    return StatusItem(icon: Icons.favorite, title: '건강 점수', value: '$score');
+                  },
+                ),
+              ),
 
-                          String averageSleep = count > 0 ? (totalDuration / count).toStringAsFixed(1) : 'N/A';
+              // 2. 수면 시간 (기존 유지)
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => _showSleepTimeInputDialog(context),
+                  child: StreamBuilder<List<Map<String, dynamic>>>(
+                    stream: _currentUserId != null ? _firestoreService.getSleepScoresStream(_currentUserId!) : null,
+                    builder: (context, sleepSnapshot) {
+                      if (sleepSnapshot.connectionState == ConnectionState.waiting) {
+                        return const StatusItem(icon: Icons.hotel, title: '수면 시간', value: '...');
+                      }
 
-                          return StatusItem(icon: Icons.hotel, title: '수면 시간', value: '$averageSleep 시간');
-                        },
-                      ),
-                    ),
+                      List<Map<String, dynamic>> sleepData = sleepSnapshot.data ?? [];
+                      double totalDuration = 0.0;
+                      int count = 0;
+
+                      // 최근 7일간의 평균 수면 시간 계산
+                      final now = DateTime.now();
+                      final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+                      final endOfWeek = startOfWeek.add(const Duration(days: 6));
+
+                      final filteredData = sleepData.where((record) {
+                        final ts = record['timestamp'];
+                        if (ts == null || ts is! Timestamp) return false;
+                        return ts.toDate().isAfter(startOfWeek.subtract(const Duration(days: 1))) &&
+                            ts.toDate().isBefore(endOfWeek.add(const Duration(days: 1)));
+                      }).toList();
+
+                      for (var record in filteredData) {
+                        try {
+                          totalDuration += (record['duration'] as num?)?.toDouble() ?? 0.0;
+                          count++;
+                        } catch (e) { }
+                      }
+
+                      String averageSleep = count > 0 ? (totalDuration / count).toStringAsFixed(1) : 'N/A';
+
+                      return StatusItem(icon: Icons.hotel, title: '수면 시간', value: '$averageSleep 시간');
+                    },
                   ),
-                  Expanded(
-                    child: StatusItem(
+                ),
+              ),
+
+              // 3. 걸음 수 (Firestore health_data에서 가져오기)
+              Expanded(
+                child: StreamBuilder<List<Map<String, dynamic>>>(
+                  stream: _currentUserId != null
+                      ? _firestoreService.getHealthDataStream(_currentUserId!)
+                      : null,
+                  builder: (context, snapshot) {
+                    // Firestore 데이터가 없으면 Health API 데이터 사용 (폴백)
+                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                      return StatusItem(
+                        icon: Icons.directions_walk,
+                        title: '걸음 수',
+                        value: _stepCount > 0 ? _stepCount.toString() : 'N/A',
+                      );
+                    }
+
+                    // 오늘의 걸음 수 데이터 가져오기
+                    final now = DateTime.now();
+                    final startOfDay = DateTime(now.year, now.month, now.day);
+
+                    final todayData = snapshot.data!.where((item) {
+                      final ts = item['timestamp'];
+                      if (ts == null || ts is! Timestamp) return false;
+                      final timestamp = ts.toDate();
+                      return timestamp.isAfter(startOfDay);
+                    }).toList();
+
+                    if (todayData.isEmpty) {
+                      return StatusItem(
+                        icon: Icons.directions_walk,
+                        title: '걸음 수',
+                        value: _stepCount > 0 ? _stepCount.toString() : 'N/A',
+                      );
+                    }
+
+                    // 오늘의 최신 걸음 수
+                    final latestData = todayData.last;
+                    final steps = (latestData['steps'] as num?)?.toInt() ?? _stepCount;
+
+                    return StatusItem(
                       icon: Icons.directions_walk,
                       title: '걸음 수',
-                      value: _stepCount.toString(),
-                    ),
-                  ),
-                ],
-              );
-            },
+                      value: steps.toString(),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
         ],
       ),

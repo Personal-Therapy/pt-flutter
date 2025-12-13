@@ -386,10 +386,21 @@ class FirestoreService {
     });
   }
 
-  // [추가] 일별 종합 점수 리스트 가져오기 (통계 화면용)
+  // 일별 종합 점수 리스트 가져오기 (통계 화면용)
   Stream<List<Map<String, dynamic>>> getDailyMentalStatusListStream(String uid) {
     return _db.collection('users').doc(uid).collection('daily_mental_status')
         .orderBy('date', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
+  }
+
+  /// health_data 컬렉션에서 건강 데이터 스트림 가져오기
+  Stream<List<Map<String, dynamic>>> getHealthDataStream(String userId) {
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('health_data')
+        .orderBy('timestamp', descending: false)
         .snapshots()
         .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
   }
