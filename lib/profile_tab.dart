@@ -246,40 +246,29 @@ class ProfileTabState extends State<ProfileTab> {
             children: [
               // 1. 건강 점수 (정신건강 종합 점수 - overallScore)
               Expanded(
-                child: StreamBuilder<List<Map<String, dynamic>>>(
+                child: StreamBuilder<Map<String, dynamic>?>(
+                  // [변경] 리스트 스트림(List) 대신, 날짜 기반 단일 문서 스트림(Map)을 사용합니다.
+                  // _firestoreService에 getDailyMentalStatusStream 함수가 정의되어 있어야 합니다.
                   stream: _currentUserId != null
-                      ? _firestoreService.getDailyMentalStatusListStream(_currentUserId!)
+                      ? _firestoreService.getDailyMentalStatusStream(_currentUserId!, DateTime.now())
                       : null,
                   builder: (context, snapshot) {
+                    // 1. 로딩 중일 때
                     if (snapshot.connectionState == ConnectionState.waiting) {
                       return const StatusItem(icon: Icons.favorite, title: '건강 점수', value: '...');
                     }
 
-                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                    // 2. 데이터가 아예 없거나(null), 아직 오늘의 기록이 없는 경우
+                    if (!snapshot.hasData || snapshot.data == null) {
+                      // 오늘의 기록이 없을 때 '0' 또는 'N/A' 등으로 표시
                       return const StatusItem(icon: Icons.favorite, title: '건강 점수', value: 'N/A');
                     }
 
-                    // 오늘 날짜의 최신 데이터 가져오기
-                    final now = DateTime.now();
-                    final startOfDay = DateTime(now.year, now.month, now.day);
+                    final data = snapshot.data!;
 
-                    final todayData = snapshot.data!.where((item) {
-                      final ts = item['timestamp'];
-                      if (ts == null || ts is! Timestamp) return false;
-                      final timestamp = ts.toDate();
-                      return timestamp.isAfter(startOfDay);
-                    }).toList();
+                    // 3. [핵심] updateDailyMentalStatus 함수가 저장한 'overallScore' 필드 가져오기
+                    final score = (data['overallScore'] as num?)?.toInt() ?? 0;
 
-                    if (todayData.isEmpty) {
-                      // 오늘 데이터가 없으면 가장 최근 데이터 사용
-                      final latestData = snapshot.data!.last;
-                      final score = (latestData['overallScore'] as num?)?.toInt() ?? 0;
-                      return StatusItem(icon: Icons.favorite, title: '건강 점수', value: '$score');
-                    }
-
-                    // 오늘의 가장 최근 점수
-                    final latestTodayData = todayData.last;
-                    final score = (latestTodayData['overallScore'] as num?)?.toInt() ?? 0;
                     return StatusItem(icon: Icons.favorite, title: '건강 점수', value: '$score');
                   },
                 ),
