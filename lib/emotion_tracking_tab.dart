@@ -148,7 +148,7 @@ class EmotionTrackingTabState extends State<EmotionTrackingTab> {
     );
   }
 
-  /// 오늘의 상태 카드 (스트레스, 건강 점수, 수면 시간)
+  /// 오늘의 상태 카드 (건강 점수, 수면 시간)
   Widget _buildDailyStatusCard() {
     return Container(
       padding: const EdgeInsets.all(24.0),
@@ -166,23 +166,22 @@ class EmotionTrackingTabState extends State<EmotionTrackingTab> {
             Row(
               mainAxisAlignment: MainAxisAlignment.spaceBetween,
               children: [
-                // [1] 스트레스 (기존 유지)
+                // [1] 건강 점수 - Firebase에서 overallScore 가져옴
                 _buildStreamedStatusItem(
-                  stream: _firestoreService.getMoodScoresStream(_currentUserId!),
-                  label: '스트레스',
-                  valueColor: const Color(0xFF1F2937),
-                  timePeriod: 'daily',
-                  scoreExtractor: (data) => (data['score'] as num?)?.toDouble() ?? 0.0,
-                  isStress: true,
-                ),
-                // [2] 건강 점수 (수정됨!) -> 종합 점수(overallScore)를 가져오도록 변경
-                _buildStreamedStatusItem(
-                  stream: _firestoreService.getDailyMentalStatusListStream(_currentUserId!), // [변경]
-                  label: '종합 건강 점수', // [변경] 라벨을 명확하게
+                  stream: _firestoreService.getDailyMentalStatusListStream(_currentUserId!),
+                  label: '종합 건강 점수',
                   valueColor: const Color(0xFF2563EB),
                   timePeriod: 'daily',
-                  // [변경] 'overallScore' 필드를 읽도록 수정
                   scoreExtractor: (data) => (data['overallScore'] as num?)?.toDouble() ?? 0.0,
+                ),
+                // [2] 수면 시간 - Firebase에서 가져옴
+                _buildStreamedStatusItem(
+                  stream: _firestoreService.getSleepScoresStream(_currentUserId!),
+                  label: '수면 시간',
+                  valueColor: const Color(0xFF9333EA),
+                  timePeriod: 'daily',
+                  scoreExtractor: (data) => (data['duration'] as num?)?.toDouble() ?? 0.0,
+                  unit: 'h',
                 ),
               ],
             )
@@ -195,46 +194,142 @@ class EmotionTrackingTabState extends State<EmotionTrackingTab> {
 
   /// 오늘의 감정 분포 카드
   Widget _buildDailyEmotionDistributionCard() {
-    return Container(
-      padding: const EdgeInsets.all(24.0),
-      decoration: BoxDecoration(
-        color: Colors.white,
-        borderRadius: BorderRadius.circular(16.0),
-        boxShadow: [
-          BoxShadow(
-            color: Colors.black.withOpacity(0.05),
-            blurRadius: 2,
-            offset: const Offset(0, 1),
-          ),
-        ],
-      ),
-      child: Column(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          Text(
-            '오늘의 감정 분포',
-            style: GoogleFonts.roboto(
-              fontWeight: FontWeight.w500,
-              fontSize: 14,
-              color: const Color(0xFF1F2937),
+    if (_currentUserId == null) {
+      return const Center(child: Text('로그인이 필요합니다.'));
+    }
+
+    // 💡 FirestoreService에서 AI 챗 점수 스트림을 가져옵니다.
+    return StreamBuilder<List<Map<String, dynamic>>>(
+      stream: _firestoreService.getAIChatScoresStream(_currentUserId!),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState == ConnectionState.waiting) {
+          // 로딩 중일 때 로딩 카드를 표시합니다.
+          // (파일에 정의된 _buildLoadingCard가 있다고 가정합니다.)
+          // return _buildLoadingCard();
+          return Container(
+            padding: const EdgeInsets.all(24.0),
+            decoration: BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.circular(16.0),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withOpacity(0.05),
+                  blurRadius: 2,
+                  offset: const Offset(0, 1),
+                ),
+              ],
             ),
+            child: const Center(child: CircularProgressIndicator()),
+          );
+        }
+
+        final allChatData = snapshot.data ?? [];
+        final now = DateTime.now();
+        final startOfDay = DateTime(now.year, now.month, now.day);
+
+        // 1. 오늘 기록만 필터링 (timestamp가 오늘 00:00:00 이후인 데이터)
+        final todayData = allChatData.where((item) {
+          final ts = item['timestamp'];
+          if (ts == null || ts is! Timestamp) return false;
+          final timestamp = ts.toDate();
+          return timestamp.isAfter(startOfDay);
+        }).toList();
+
+        // 2. 감정 점수 집계
+        Map<String, int> dailyEmotions = {
+          'joy': 0, 'sadness': 0, 'anger': 0, 'anxiety': 0, 'peace': 0,
+        };
+
+        // 각 감정의 총합을 저장하는 변수
+        Map<String, int> emotionSums = Map.from(dailyEmotions);
+
+        // 오늘 기록된 대화 횟수
+        final chatCount = todayData.length;
+
+        if (chatCount > 0) {
+          // 1단계: 모든 대화의 감정 점수를 합산
+          for (var item in todayData) {
+            final emotions = item['emotions'] as Map<String, dynamic>?;
+            if (emotions != null) {
+              emotions.forEach((key, value) {
+                if (emotionSums.containsKey(key)) {
+                  // 저장된 점수를 누적
+                  emotionSums[key] = (emotionSums[key] ?? 0) + (value as num).toInt();
+                }
+              });
+            }
+          }
+          // 2단계: 합산된 점수를 대화 횟수로 나누어 평균을 계산
+          emotionSums.forEach((key, sum) {
+            // 평균을 계산하고, 소수점 없이 정수로 반올림하여 저장
+            dailyEmotions[key] = (sum / chatCount).round();
+          });
+        }
+
+        final totalScore = dailyEmotions.values.fold<int>(0, (sum, score) => sum + score);
+
+        // 3. 비율 및 퍼센트 계산 헬퍼 함수
+        double getRatio(String emotionKey) {
+          if (totalScore == 0) return 0.0;
+          return (dailyEmotions[emotionKey] ?? 0) / totalScore;
+        }
+
+        String getPercentage(String emotionKey) {
+          if (totalScore == 0) return '0%';
+          final ratio = getRatio(emotionKey);
+          return '${(ratio * 100).round()}%';
+        }
+
+        return Container(
+          padding: const EdgeInsets.all(24.0),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(16.0),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.05),
+                blurRadius: 2,
+                offset: const Offset(0, 1),
+              ),
+            ],
           ),
-          const SizedBox(height: 12.0),
-          _buildEmotionProgress('기쁨', 0.0, const Color(0xFF22C55E), '0%'),
-          const SizedBox(height: 12.0),
-          _buildEmotionProgress('슬픔', 0.0, const Color(0xFF3B82F6), '0%'),
-          const SizedBox(height: 12.0),
-          _buildEmotionProgress('불안', 0.0, const Color(0xFFEAB308), '0%'),
-          const SizedBox(height: 12.0),
-          _buildEmotionProgress('분노', 0.0, const Color(0xFFEF4444), '0%'),
-          const SizedBox(height: 12.0),
-          _buildEmotionProgress('평온', 0.0, const Color(0xFF6B7280), '0%'),
-        ],
-      ),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                '오늘의 감정 분포',
+                style: GoogleFonts.roboto(
+                  fontWeight: FontWeight.w500,
+                  fontSize: 14,
+                  color: const Color(0xFF1F2937),
+                ),
+              ),
+              const SizedBox(height: 12.0),
+              // 4. 집계된 감정 데이터 표시
+              if (totalScore == 0)
+                const Center(child: Text('오늘의 AI 대화 기록이 없어 감정 분포를 표시할 수 없습니다.'))
+              else
+                Column(
+                  children: [
+                    _buildEmotionProgress('기쁨', getRatio('joy'), const Color(0xFF22C55E), getPercentage('joy')),
+                    const SizedBox(height: 12.0),
+                    _buildEmotionProgress('슬픔', getRatio('sadness'), const Color(0xFF3B82F6), getPercentage('sadness')),
+                    const SizedBox(height: 12.0),
+                    _buildEmotionProgress('불안', getRatio('anxiety'), const Color(0xFFEAB308), getPercentage('anxiety')),
+                    const SizedBox(height: 12.0),
+                    _buildEmotionProgress('분노', getRatio('anger'), const Color(0xFFEF4444), getPercentage('anger')),
+                    const SizedBox(height: 12.0),
+                    _buildEmotionProgress('평온', getRatio('peace'), const Color(0xFF6B7280), getPercentage('peace')),
+                  ],
+                ),
+            ],
+          ),
+        );
+      },
     );
   }
 
-  /// 주간 변화 추이 카드 (스트레스 지수, 건강 점수, 수면 시간)
+  /// 주간 변화 추이 카드 (건강 점수, 수면 시간)
   Widget _buildDailyTrendsCard() {
     return Container(
       padding: const EdgeInsets.all(24.0),
@@ -262,8 +357,6 @@ class EmotionTrackingTabState extends State<EmotionTrackingTab> {
           ),
           const SizedBox(height: 24.0),
           if (_currentUserId != null) ...[
-            _buildWeeklyMetricChart('스트레스 지수', const Color(0xFFEF4444), _firestoreService.getMoodScoresStream(_currentUserId!)),
-            const SizedBox(height: 24.0),
             _buildWeeklyMetricChart('건강 점수', const Color(0xFF3B82F6), _firestoreService.getMentalHealthScoresStream(_currentUserId!)),
             const SizedBox(height: 24.0),
             _buildWeeklyMetricChart('수면 시간', const Color(0xFFA855F7), _buildSleepDataStream(), dataField: 'duration', isSleepData: true),
@@ -272,23 +365,17 @@ class EmotionTrackingTabState extends State<EmotionTrackingTab> {
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _buildAverageSummaryItem(
-                    '평균 스트레스',
-                    _firestoreService.getMoodScoresStream(_currentUserId!),
-                    (data) => (data['score'] as num).toDouble(),
-                    '',
-                  ),
+                  '평균 건강점수',
+                  _firestoreService.getMentalHealthScoresStream(_currentUserId!),
+                      (data) => (data['score'] as num).toDouble(),
+                  '',
+                ),
                 _buildAverageSummaryItem(
-                    '평균 건강점수',
-                    _firestoreService.getMentalHealthScoresStream(_currentUserId!),
-                    (data) => (data['score'] as num).toDouble(),
-                    '',
-                  ),
-                _buildAverageSummaryItem(
-                    '평균 수면',
-                    _firestoreService.getSleepScoresStream(_currentUserId!),
-                    (data) => (data['duration'] as num).toDouble(),
-                    'h',
-                  ),
+                  '평균 수면',
+                  _firestoreService.getSleepScoresStream(_currentUserId!),
+                      (data) => (data['duration'] as num).toDouble(),
+                  'h',
+                ),
               ],
             ),
           ] else
@@ -361,7 +448,7 @@ class EmotionTrackingTabState extends State<EmotionTrackingTab> {
             Icons.chat_bubble_outline,
             const Color(0xFF16A34A),
             const Color(0xFFDCFCE7),
-            () {
+                () {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const AIChatScreen()),
@@ -377,7 +464,7 @@ class EmotionTrackingTabState extends State<EmotionTrackingTab> {
             Icons.spa_outlined,
             const Color(0xFFEA580C),
             const Color(0xFFFFEDD5),
-            () {
+                () {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const HealingScreen()),
@@ -417,44 +504,35 @@ class EmotionTrackingTabState extends State<EmotionTrackingTab> {
         children: [
           Text('이번 주 상태', style: GoogleFonts.roboto(fontWeight: FontWeight.w600, fontSize: 18, color: const Color(0xFF1F2937),)),
           const SizedBox(height: 16.0),
-          if (_currentUserId != null)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // [1] 스트레스 (기존 유지)
-                _buildStreamedStatusItem(
-                  stream: _firestoreService.getMoodScoresStream(_currentUserId!),
-                  label: '평균 스트레스',
-                  valueColor: const Color(0xFF1F2937),
-                  timePeriod: 'weekly',
-                  scoreExtractor: (data) => (data['score'] as num?)?.toDouble() ?? 0.0,
-                  isStress: true,
-                ),
-                // [2] 건강 점수 (수정됨!)
-                _buildStreamedStatusItem(
-                  stream: _firestoreService.getDailyMentalStatusListStream(_currentUserId!), // [변경]
-                  label: '평균 건강 점수',
-                  valueColor: const Color(0xFF2563EB),
-                  timePeriod: 'weekly',
-                  // [변경] 'overallScore' 필드를 읽도록 수정
-                  scoreExtractor: (data) => (data['overallScore'] as num?)?.toDouble() ?? 0.0,
-                ),
-              ],
-            )
-          else
-            const Center(child: Text('로그인이 필요합니다.')),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // [1] 건강 점수 (하드코딩)
+              _buildHardcodedStatusItem(
+                label: '평균 건강 점수',
+                value: '72',
+                valueColor: const Color(0xFF2563EB),
+              ),
+              // [2] 수면 시간 (하드코딩)
+              _buildHardcodedStatusItem(
+                label: '평균 수면 시간',
+                value: '7.1h',
+                valueColor: const Color(0xFF9333EA),
+              ),
+            ],
+          ),
           const SizedBox(height: 24.0),
           Text('평균 감정 분포', style: GoogleFonts.roboto(fontWeight: FontWeight.w500, fontSize: 14, color: const Color(0xFF1F2937),)),
           const SizedBox(height: 12.0),
-          _buildEmotionProgress('기쁨', 0.0, const Color(0xFF22C55E), '0%'),
+          _buildEmotionProgress('기쁨', 0.3, const Color(0xFF22C55E), '30%'),
           const SizedBox(height: 12.0),
-          _buildEmotionProgress('슬픔', 0.0, const Color(0xFF3B82F6), '0%'),
+          _buildEmotionProgress('슬픔', 0.5, const Color(0xFF3B82F6), '50%'),
           const SizedBox(height: 12.0),
-          _buildEmotionProgress('불안', 0.0, const Color(0xFFF59E0B), '0%'),
+          _buildEmotionProgress('불안', 0.7, const Color(0xFFF59E0B), '70%'),
           const SizedBox(height: 12.0),
-          _buildEmotionProgress('분노', 0.0, const Color(0xFFEF4444), '0%'),
+          _buildEmotionProgress('분노', 0.2, const Color(0xFFEF4444), '20%'),
           const SizedBox(height: 12.0),
-          _buildEmotionProgress('평온', 0.0, const Color(0xFF6B7280), '0%'),
+          _buildEmotionProgress('평온', 0.4, const Color(0xFF6B7280), '40%'),
         ],
       ),
     );
@@ -492,10 +570,12 @@ class EmotionTrackingTabState extends State<EmotionTrackingTab> {
             final startOfDay = DateTime(now.year, now.month, now.day);
             final endOfDay = startOfDay.add(const Duration(days: 1));
             filteredData = data.where((item) {
-              final ts = item['timestamp'];
-              if (ts == null || ts is! Timestamp) return false;  // ✅ null 체크
+              // timestamp 또는 lastUpdated 필드 확인
+              final ts = item['timestamp'] ?? item['lastUpdated'];
+              if (ts == null || ts is! Timestamp) return false;
               final timestamp = ts.toDate();
-              return timestamp.isAfter(startOfDay) && timestamp.isBefore(endOfDay);
+              // isAfter 대신 !isBefore 사용 (자정 포함)
+              return !timestamp.isBefore(startOfDay) && timestamp.isBefore(endOfDay);
             }).toList();
             break;
           case 'weekly':
@@ -570,58 +650,116 @@ class EmotionTrackingTabState extends State<EmotionTrackingTab> {
   }) {
     return Expanded(
       child: Column(
-          crossAxisAlignment: CrossAxisAlignment.center,
-          children: [
-            if (tag != null) ...[
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
-                decoration: BoxDecoration(
-                  color: tagBgColor,
-                  borderRadius: BorderRadius.circular(9999),
-                ),
-                child: Text(
-                  tag,
-                  style: GoogleFonts.roboto(
-                    fontSize: 14,
-                    fontWeight: FontWeight.w500,
-                    color: tagColor,
-                  ),
-                  overflow: TextOverflow.ellipsis,
-                ),
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          if (tag != null) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: tagBgColor,
+                borderRadius: BorderRadius.circular(9999),
               ),
-              const SizedBox(height: 4),
-            ],
-            value == null
-                ? const SizedBox(
-                    height: 23, // Approximate height of the text
-                    width: 23,
-                    child: CircularProgressIndicator(strokeWidth: 2),
-                  )
-                : Text(
-                    value,
-                    style: GoogleFonts.roboto(
-                      fontSize: tag == null ? 23 : 18,
-                      fontWeight: FontWeight.w700,
-                      color: valueColor,
-                    ),
-                    overflow: TextOverflow.ellipsis,
-                  ),
-            const SizedBox(height: 4),
-            Text(
-              label,
-              style: GoogleFonts.roboto(
-                fontSize: 12,
-                fontWeight: FontWeight.w400,
-                color: const Color(0xFF6B7280),
+              child: Text(
+                tag,
+                style: GoogleFonts.roboto(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: tagColor,
+                ),
+                overflow: TextOverflow.ellipsis,
               ),
-              overflow: TextOverflow.ellipsis,
-              maxLines: 2,
-              textAlign: TextAlign.center,
             ),
+            const SizedBox(height: 4),
           ],
-        ),
+          value == null
+              ? const SizedBox(
+            height: 23, // Approximate height of the text
+            width: 23,
+            child: CircularProgressIndicator(strokeWidth: 2),
+          )
+              : Text(
+            value,
+            style: GoogleFonts.roboto(
+              fontSize: tag == null ? 23 : 18,
+              fontWeight: FontWeight.w700,
+              color: valueColor,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: GoogleFonts.roboto(
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+              color: const Color(0xFF6B7280),
+            ),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 2,
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
     );
-}
+  }
+
+  /// 하드코딩된 상태 아이템 (주간/월간용)
+  Widget _buildHardcodedStatusItem({
+    required String label,
+    required String value,
+    required Color valueColor,
+    String? tag,
+    Color? tagColor,
+    Color? tagBgColor,
+  }) {
+    return Expanded(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.center,
+        children: [
+          if (tag != null) ...[
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 4),
+              decoration: BoxDecoration(
+                color: tagBgColor,
+                borderRadius: BorderRadius.circular(9999),
+              ),
+              child: Text(
+                tag,
+                style: GoogleFonts.roboto(
+                  fontSize: 14,
+                  fontWeight: FontWeight.w500,
+                  color: tagColor,
+                ),
+                overflow: TextOverflow.ellipsis,
+              ),
+            ),
+            const SizedBox(height: 4),
+          ],
+          Text(
+            value,
+            style: GoogleFonts.roboto(
+              fontSize: tag == null ? 23 : 18,
+              fontWeight: FontWeight.w700,
+              color: valueColor,
+            ),
+            overflow: TextOverflow.ellipsis,
+          ),
+          const SizedBox(height: 4),
+          Text(
+            label,
+            style: GoogleFonts.roboto(
+              fontSize: 12,
+              fontWeight: FontWeight.w400,
+              color: const Color(0xFF6B7280),
+            ),
+            overflow: TextOverflow.ellipsis,
+            maxLines: 2,
+            textAlign: TextAlign.center,
+          ),
+        ],
+      ),
+    );
+  }
 
   Widget _buildEmotionProgress(String label, double value, Color color, String percentage) {
     return Row(
@@ -714,8 +852,6 @@ class EmotionTrackingTabState extends State<EmotionTrackingTab> {
           ),
           const SizedBox(height: 24.0),
           if (_currentUserId != null) ...[
-            _buildWeeklyMetricChart('스트레스 지수', const Color(0xFFEF4444), _firestoreService.getMoodScoresStream(_currentUserId!)),
-            const SizedBox(height: 24.0),
             _buildWeeklyMetricChart('건강 점수', const Color(0xFF3B82F6), _firestoreService.getMentalHealthScoresStream(_currentUserId!)),
             const SizedBox(height: 24.0),
             _buildWeeklyMetricChart('수면 시간', const Color(0xFFA855F7), _buildSleepDataStream(), dataField: 'duration', isSleepData: true),
@@ -724,21 +860,15 @@ class EmotionTrackingTabState extends State<EmotionTrackingTab> {
               mainAxisAlignment: MainAxisAlignment.spaceAround,
               children: [
                 _buildAverageSummaryItem(
-                  '평균 스트레스',
-                  _firestoreService.getMoodScoresStream(_currentUserId!),
-                      (data) => (data['score'] as num?)?.toDouble() ?? 0.0,  // ✅
-                  '',
-                ),
-                _buildAverageSummaryItem(
                   '평균 건강점수',
                   _firestoreService.getMentalHealthScoresStream(_currentUserId!),
-                      (data) => (data['score'] as num?)?.toDouble() ?? 0.0,  // ✅
+                      (data) => (data['score'] as num?)?.toDouble() ?? 0.0,
                   '',
                 ),
                 _buildAverageSummaryItem(
                   '평균 수면',
                   _firestoreService.getSleepScoresStream(_currentUserId!),
-                      (data) => (data['duration'] as num?)?.toDouble() ?? 0.0,  // ✅
+                      (data) => (data['duration'] as num?)?.toDouble() ?? 0.0,
                   'h',
                 ),
               ],
@@ -755,180 +885,180 @@ class EmotionTrackingTabState extends State<EmotionTrackingTab> {
     return _firestoreService.getSleepScoresStream(_currentUserId!);
   }
 
-Widget _buildWeeklyMetricChart(String title, Color color, Stream<List<Map<String, dynamic>>> stream, {String dataField = 'score', bool isSleepData = false}) {
-  return Column(
-    crossAxisAlignment: CrossAxisAlignment.start,
-    children: [
-      Row(
-        children: [
-          Container(
-            width: 12,
-            height: 12,
-            decoration: BoxDecoration(
-              color: color,
-              borderRadius: BorderRadius.circular(9999),
-            ),
-          ),
-          const SizedBox(width: 8),
-          Text(
-            title,
-            style: GoogleFonts.roboto(
-              fontWeight: FontWeight.w500,
-              fontSize: 14,
-              color: const Color(0xFF374151),
-            ),
-          ),
-        ],
-      ),
-      const SizedBox(height: 12.0),
-      StreamBuilder<List<Map<String, dynamic>>>(
-        stream: stream,
-        builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const SizedBox(
-              height: 140,
-              child: Center(child: CircularProgressIndicator()),
-            );
-          }
-          if (snapshot.hasError) {
-            return Center(child: Text('Error: ${snapshot.error}'));
-          }
-
-          List<Map<String, dynamic>> data = snapshot.data ?? [];
-          Map<int, List<double>> dailyAggregatedScores = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: []};
-
-          final now = DateTime.now();
-          final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
-          final endOfWeek = startOfWeek.add(const Duration(days: 6));
-
-          final filteredData = data.where((scoreData) {
-            final timestamp = scoreData['timestamp'] as Timestamp?;
-            if (timestamp == null) return false;
-            final date = timestamp.toDate();
-            // 정확한 주간 범위 필터링
-            final startOfDay = DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day);
-            final endOfDay = DateTime(endOfWeek.year, endOfWeek.month, endOfWeek.day, 23, 59, 59);
-            return !date.isBefore(startOfDay) && !date.isAfter(endOfDay);
-          }).toList();
-
-          for (var scoreData in filteredData) {
-            final timestamp = (scoreData['timestamp'] as Timestamp).toDate();
-            final score = (scoreData[dataField] as num?)?.toDouble();
-            if (score != null) {
-              dailyAggregatedScores.putIfAbsent(timestamp.weekday, () => []).add(score);
-            }
-          }
-
-          List<BarChartGroupData> barGroups = [];
-          double maxY = 0;
-
-          for (int i = 1; i <= 7; i++) {
-            final scores = dailyAggregatedScores[i] ?? [];
-            final avgScore = scores.isNotEmpty ? scores.reduce((a, b) => a + b) / scores.length : 0.0;
-            if (avgScore > maxY) {
-              maxY = avgScore;
-            }
-            barGroups.add(
-              BarChartGroupData(
-                x: i,
-                barRods: [
-                  BarChartRodData(
-                    toY: avgScore,
-                    color: color,
-                    width: 16,
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
-                  ),
-                ],
+  Widget _buildWeeklyMetricChart(String title, Color color, Stream<List<Map<String, dynamic>>> stream, {String dataField = 'score', bool isSleepData = false}) {
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Row(
+          children: [
+            Container(
+              width: 12,
+              height: 12,
+              decoration: BoxDecoration(
+                color: color,
+                borderRadius: BorderRadius.circular(9999),
               ),
-            );
-          }
-          
-          maxY = isSleepData ? (maxY == 0 ? 10 : (maxY * 1.2).ceilToDouble()) : 100;
+            ),
+            const SizedBox(width: 8),
+            Text(
+              title,
+              style: GoogleFonts.roboto(
+                fontWeight: FontWeight.w500,
+                fontSize: 14,
+                color: const Color(0xFF374151),
+              ),
+            ),
+          ],
+        ),
+        const SizedBox(height: 12.0),
+        StreamBuilder<List<Map<String, dynamic>>>(
+          stream: stream,
+          builder: (context, snapshot) {
+            if (snapshot.connectionState == ConnectionState.waiting) {
+              return const SizedBox(
+                height: 140,
+                child: Center(child: CircularProgressIndicator()),
+              );
+            }
+            if (snapshot.hasError) {
+              return Center(child: Text('Error: ${snapshot.error}'));
+            }
 
+            List<Map<String, dynamic>> data = snapshot.data ?? [];
+            Map<int, List<double>> dailyAggregatedScores = {1: [], 2: [], 3: [], 4: [], 5: [], 6: [], 7: []};
 
-          return SizedBox(
-            height: 140,
-            child: BarChart(
-              BarChartData(
-                barTouchData: BarTouchData(
-                  touchTooltipData: BarTouchTooltipData(
-                    tooltipRoundedRadius: 8,
-                    getTooltipItem: (group, groupIndex, rod, rodIndex) {
-                      final dayDate = startOfWeek.add(Duration(days: group.x - 1));
-                      final dateString = DateFormat('M/d').format(dayDate);
-                      String valueText;
-                      if (isSleepData) {
-                        valueText = '${rod.toY.toStringAsFixed(1)}h';
-                      } else {
-                        valueText = rod.toY.toStringAsFixed(0);
-                      }
-                      
-                      return BarTooltipItem(
-                        '$valueText\n',
-                        GoogleFonts.roboto(
-                          color: Colors.white,
-                          fontWeight: FontWeight.bold,
-                          fontSize: 14,
-                        ),
-                        children: <TextSpan>[
-                          TextSpan(
-                            text: dateString,
-                            style: GoogleFonts.roboto(
-                              color: Colors.white.withOpacity(0.8),
-                              fontWeight: FontWeight.normal,
-                              fontSize: 12,
-                            ),
-                          ),
-                        ],
-                      );
-                    },
-                    getTooltipColor: (_) => const Color(0xFF374151),
-                  ),
+            final now = DateTime.now();
+            final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+            final endOfWeek = startOfWeek.add(const Duration(days: 6));
+
+            final filteredData = data.where((scoreData) {
+              final timestamp = scoreData['timestamp'] as Timestamp?;
+              if (timestamp == null) return false;
+              final date = timestamp.toDate();
+              // 정확한 주간 범위 필터링
+              final startOfDay = DateTime(startOfWeek.year, startOfWeek.month, startOfWeek.day);
+              final endOfDay = DateTime(endOfWeek.year, endOfWeek.month, endOfWeek.day, 23, 59, 59);
+              return !date.isBefore(startOfDay) && !date.isAfter(endOfDay);
+            }).toList();
+
+            for (var scoreData in filteredData) {
+              final timestamp = (scoreData['timestamp'] as Timestamp).toDate();
+              final score = (scoreData[dataField] as num?)?.toDouble();
+              if (score != null) {
+                dailyAggregatedScores.putIfAbsent(timestamp.weekday, () => []).add(score);
+              }
+            }
+
+            List<BarChartGroupData> barGroups = [];
+            double maxY = 0;
+
+            for (int i = 1; i <= 7; i++) {
+              final scores = dailyAggregatedScores[i] ?? [];
+              final avgScore = scores.isNotEmpty ? scores.reduce((a, b) => a + b) / scores.length : 0.0;
+              if (avgScore > maxY) {
+                maxY = avgScore;
+              }
+              barGroups.add(
+                BarChartGroupData(
+                  x: i,
+                  barRods: [
+                    BarChartRodData(
+                      toY: avgScore,
+                      color: color,
+                      width: 16,
+                      borderRadius: const BorderRadius.vertical(top: Radius.circular(4)),
+                    ),
+                  ],
                 ),
-                titlesData: FlTitlesData(
-                  show: true,
-                  rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
-                  bottomTitles: AxisTitles(
-                    sideTitles: SideTitles(
-                      showTitles: true,
-                      getTitlesWidget: (double value, TitleMeta meta) {
-                        const style = TextStyle(
-                          color: Color(0xFF6B7280),
-                          fontWeight: FontWeight.bold,
-                          fontSize: 12,
-                        );
-                        Widget text;
-                        switch (value.toInt()) {
-                          case 1: text = const Text('월', style: style); break;
-                          case 2: text = const Text('화', style: style); break;
-                          case 3: text = const Text('수', style: style); break;
-                          case 4: text = const Text('목', style: style); break;
-                          case 5: text = const Text('금', style: style); break;
-                          case 6: text = const Text('토', style: style); break;
-                          case 7: text = const Text('일', style: style); break;
-                          default: text = const Text('', style: style); break;
+              );
+            }
+
+            maxY = isSleepData ? (maxY == 0 ? 10 : (maxY * 1.2).ceilToDouble()) : 100;
+
+
+            return SizedBox(
+              height: 140,
+              child: BarChart(
+                BarChartData(
+                  barTouchData: BarTouchData(
+                    touchTooltipData: BarTouchTooltipData(
+                      tooltipRoundedRadius: 8,
+                      getTooltipItem: (group, groupIndex, rod, rodIndex) {
+                        final dayDate = startOfWeek.add(Duration(days: group.x - 1));
+                        final dateString = DateFormat('M/d').format(dayDate);
+                        String valueText;
+                        if (isSleepData) {
+                          valueText = '${rod.toY.toStringAsFixed(1)}h';
+                        } else {
+                          valueText = rod.toY.toStringAsFixed(0);
                         }
-                        return SideTitleWidget(axisSide: meta.axisSide, space: 8.0, child: text);
+
+                        return BarTooltipItem(
+                          '$valueText\n',
+                          GoogleFonts.roboto(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 14,
+                          ),
+                          children: <TextSpan>[
+                            TextSpan(
+                              text: dateString,
+                              style: GoogleFonts.roboto(
+                                color: Colors.white.withOpacity(0.8),
+                                fontWeight: FontWeight.normal,
+                                fontSize: 12,
+                              ),
+                            ),
+                          ],
+                        );
                       },
-                      reservedSize: 30,
+                      getTooltipColor: (_) => const Color(0xFF374151),
                     ),
                   ),
+                  titlesData: FlTitlesData(
+                    show: true,
+                    rightTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    topTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    leftTitles: const AxisTitles(sideTitles: SideTitles(showTitles: false)),
+                    bottomTitles: AxisTitles(
+                      sideTitles: SideTitles(
+                        showTitles: true,
+                        getTitlesWidget: (double value, TitleMeta meta) {
+                          const style = TextStyle(
+                            color: Color(0xFF6B7280),
+                            fontWeight: FontWeight.bold,
+                            fontSize: 12,
+                          );
+                          Widget text;
+                          switch (value.toInt()) {
+                            case 1: text = const Text('월', style: style); break;
+                            case 2: text = const Text('화', style: style); break;
+                            case 3: text = const Text('수', style: style); break;
+                            case 4: text = const Text('목', style: style); break;
+                            case 5: text = const Text('금', style: style); break;
+                            case 6: text = const Text('토', style: style); break;
+                            case 7: text = const Text('일', style: style); break;
+                            default: text = const Text('', style: style); break;
+                          }
+                          return SideTitleWidget(axisSide: meta.axisSide, space: 8.0, child: text);
+                        },
+                        reservedSize: 30,
+                      ),
+                    ),
+                  ),
+                  borderData: FlBorderData(show: false),
+                  barGroups: barGroups,
+                  gridData: const FlGridData(show: false),
+                  alignment: BarChartAlignment.spaceAround,
+                  maxY: maxY,
                 ),
-                borderData: FlBorderData(show: false),
-                barGroups: barGroups,
-                gridData: const FlGridData(show: false),
-                alignment: BarChartAlignment.spaceAround,
-                maxY: maxY,
               ),
-            ),
-          );
-        },
-      ),
-    ],
-  );
-}
+            );
+          },
+        ),
+      ],
+    );
+  }
 
 
   Widget _buildBarWithLabel(String day, String date, double heightFactor, Color color) {
@@ -1193,7 +1323,7 @@ Widget _buildWeeklyMetricChart(String title, Color color, Stream<List<Map<String
             Icons.chat_bubble_outline,
             const Color(0xFF16A34A),
             const Color(0xFFDCFCE7),
-            () {
+                () {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const AIChatScreen()),
@@ -1209,7 +1339,7 @@ Widget _buildWeeklyMetricChart(String title, Color color, Stream<List<Map<String
             Icons.spa_outlined,
             const Color(0xFFEA580C),
             const Color(0xFFFFEDD5),
-            () {
+                () {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const HealingScreen()),
@@ -1222,13 +1352,13 @@ Widget _buildWeeklyMetricChart(String title, Color color, Stream<List<Map<String
   }
 
   Widget _buildQuickActionItem(
-    String title,
-    String subtitle,
-    IconData icon,
-    Color iconColor,
-    Color bgColor,
-    VoidCallback onTap,
-  ) {
+      String title,
+      String subtitle,
+      IconData icon,
+      Color iconColor,
+      Color bgColor,
+      VoidCallback onTap,
+      ) {
     return GestureDetector(
       onTap: onTap,
       child: Container(
@@ -1316,41 +1446,23 @@ Widget _buildWeeklyMetricChart(String title, Color color, Stream<List<Map<String
         children: [
           Text('이번 달 상태', style: GoogleFonts.roboto(fontWeight: FontWeight.w600, fontSize: 18, color: const Color(0xFF1F2937),)),
           const SizedBox(height: 16.0),
-          if (_currentUserId != null)
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                // [1] 스트레스 (기존 유지)
-                _buildStreamedStatusItem(
-                  stream: _firestoreService.getMoodScoresStream(_currentUserId!),
-                  label: '스트레스',
-                  valueColor: const Color(0xFF1F2937),
-                  timePeriod: 'monthly',
-                  scoreExtractor: (data) => (data['score'] as num?)?.toDouble() ?? 0.0,
-                  isStress: true,
-                ),
-                // [2] 건강 점수 (수정됨!)
-                _buildStreamedStatusItem(
-                  stream: _firestoreService.getDailyMentalStatusListStream(_currentUserId!), // [변경]
-                  label: '건강 점수',
-                  valueColor: const Color(0xFF2563EB),
-                  timePeriod: 'monthly',
-                  // [변경] 'overallScore' 필드를 읽도록 수정
-                  scoreExtractor: (data) => (data['overallScore'] as num?)?.toDouble() ?? 0.0,
-                ),
-                // [3] 수면 시간 (기존 유지)
-                _buildStreamedStatusItem(
-                  stream: _firestoreService.getSleepScoresStream(_currentUserId!),
-                  label: '수면 시간',
-                  valueColor: const Color(0xFF9333EA),
-                  timePeriod: 'monthly',
-                  scoreExtractor: (data) => (data['duration'] as num?)?.toDouble() ?? 0.0,
-                  unit: 'h',
-                ),
-              ],
-            )
-          else
-            const Center(child: Text('로그인이 필요합니다.')),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              // [1] 건강 점수 (하드코딩)
+              _buildHardcodedStatusItem(
+                label: '건강 점수',
+                value: '78',
+                valueColor: const Color(0xFF2563EB),
+              ),
+              // [2] 수면 시간 (하드코딩)
+              _buildHardcodedStatusItem(
+                label: '수면 시간',
+                value: '7.2h',
+                valueColor: const Color(0xFF9333EA),
+              ),
+            ],
+          ),
         ],
       ),
     );
@@ -1382,15 +1494,15 @@ Widget _buildWeeklyMetricChart(String title, Color color, Stream<List<Map<String
             ),
           ),
           const SizedBox(height: 16.0),
-          _buildEmotionProgress('기쁨', 0.0, const Color(0xFF22C55E), '0%'),
+          _buildEmotionProgress('기쁨', 0.8, const Color(0xFF22C55E), '8%'),
           const SizedBox(height: 12.0),
-          _buildEmotionProgress('슬픔', 0.0, const Color(0xFF3B82F6), '0%'),
+          _buildEmotionProgress('슬픔', 0.35, const Color(0xFF3B82F6), '35%'),
           const SizedBox(height: 12.0),
-          _buildEmotionProgress('불안', 0.0, const Color(0xFFF59E0B), '0%'),
+          _buildEmotionProgress('불안', 0.2, const Color(0xFFF59E0B), '20%'),
           const SizedBox(height: 12.0),
-          _buildEmotionProgress('분노', 0.0, const Color(0xFFEF4444), '0%'),
+          _buildEmotionProgress('분노', 0.1, const Color(0xFFEF4444), '10%'),
           const SizedBox(height: 12.0),
-          _buildEmotionProgress('평온', 0.0, const Color(0xFF6B7280), '0%'),
+          _buildEmotionProgress('평온', 0.9, const Color(0xFF6B7280), '90%'),
         ],
       ),
     );
@@ -1422,26 +1534,104 @@ Widget _buildWeeklyMetricChart(String title, Color color, Stream<List<Map<String
             ),
           ),
           const SizedBox(height: 24.0),
-          _buildMonthlyMetricChartWithStream(
-            '스트레스',
-            const Color(0xFFCA8A04),
-            _firestoreService.getMoodScoresStream(_currentUserId!),
-          ),
-          const SizedBox(height: 24.0),
-          _buildMonthlyMetricChartWithStream(
+          // 하드코딩된 월간 차트
+          _buildHardcodedMonthlyChart(
             '건강 점수',
             const Color(0xFF2563EB),
-            _firestoreService.getMentalHealthScoresStream(_currentUserId!),
+            [72.0, 75.0, 80.0, 78.0], // 주차별 하드코딩 데이터
           ),
           const SizedBox(height: 24.0),
-          _buildMonthlyMetricChartWithStream(
+          _buildHardcodedMonthlyChart(
             '수면 시간',
             const Color(0xFF9333EA),
-            _firestoreService.getSleepScoresStream(_currentUserId!),
-            dataField: 'duration',
+            [6.8, 7.2, 7.5, 7.0], // 주차별 하드코딩 데이터
+            isSleepData: true,
           ),
         ],
       ),
+    );
+  }
+
+  /// 하드코딩된 월간 차트 위젯
+  Widget _buildHardcodedMonthlyChart(String title, Color color, List<double> weeklyData, {bool isSleepData = false}) {
+    final maxValue = weeklyData.reduce((a, b) => a > b ? a : b);
+
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: [
+        Text(
+          title,
+          style: GoogleFonts.roboto(
+            fontWeight: FontWeight.w500,
+            fontSize: 14,
+            color: const Color(0xFF1F2937),
+          ),
+        ),
+        const SizedBox(height: 12.0),
+        Row(
+          crossAxisAlignment: CrossAxisAlignment.end,
+          children: List.generate(weeklyData.length, (index) {
+            final value = weeklyData[index];
+            final heightRatio = maxValue > 0 ? value / maxValue : 0.0;
+            final height = 80.0 * heightRatio;
+
+            final valueText = isSleepData
+                ? '${value.toStringAsFixed(1)}h'
+                : value.toStringAsFixed(0);
+
+            return Expanded(
+              child: Padding(
+                padding: EdgeInsets.only(right: index < weeklyData.length - 1 ? 8.0 : 0),
+                child: Column(
+                  children: [
+                    // 수치 표시
+                    SizedBox(
+                      height: 20,
+                      child: Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: color.withOpacity(0.1),
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                        child: Text(
+                          valueText,
+                          style: GoogleFonts.roboto(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: color,
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    // 막대 그래프
+                    Container(
+                      height: 80,
+                      alignment: Alignment.bottomCenter,
+                      child: Container(
+                        height: height > 0 ? height : 4,
+                        decoration: BoxDecoration(
+                          color: color,
+                          borderRadius: BorderRadius.circular(4),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    // 주차 레이블
+                    Text(
+                      '${index + 1}주차',
+                      style: GoogleFonts.roboto(
+                        fontSize: 12,
+                        color: const Color(0xFF6B7280),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+        ),
+      ],
     );
   }
 
@@ -1473,7 +1663,7 @@ Widget _buildWeeklyMetricChart(String title, Color color, Stream<List<Map<String
           if (timestamp == null) return false;
           final date = timestamp.toDate();
           return date.isAfter(startOfMonth.subtract(const Duration(days: 1))) &&
-                 date.isBefore(endOfMonth.add(const Duration(days: 1)));
+              date.isBefore(endOfMonth.add(const Duration(days: 1)));
         }).toList();
 
         // 실제 주 수로 나누기 (최대 5주)
@@ -1490,7 +1680,7 @@ Widget _buildWeeklyMetricChart(String title, Color color, Stream<List<Map<String
             if (timestamp == null) return false;
             final date = timestamp.toDate();
             return date.isAfter(weekStart.subtract(const Duration(days: 1))) &&
-                   date.isBefore(weekEnd);
+                date.isBefore(weekEnd);
           }).toList();
 
           if (weekData.isEmpty) {
@@ -1551,20 +1741,20 @@ Widget _buildWeeklyMetricChart(String title, Color color, Stream<List<Map<String
                                 height: 20,
                                 child: isSelected && value > 0
                                     ? Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: color,
-                                          borderRadius: BorderRadius.circular(4),
-                                        ),
-                                        child: Text(
-                                          valueText,
-                                          style: GoogleFonts.roboto(
-                                            fontSize: 11,
-                                            fontWeight: FontWeight.w600,
-                                            color: Colors.white,
-                                          ),
-                                        ),
-                                      )
+                                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                  decoration: BoxDecoration(
+                                    color: color,
+                                    borderRadius: BorderRadius.circular(4),
+                                  ),
+                                  child: Text(
+                                    valueText,
+                                    style: GoogleFonts.roboto(
+                                      fontSize: 11,
+                                      fontWeight: FontWeight.w600,
+                                      color: Colors.white,
+                                    ),
+                                  ),
+                                )
                                     : null,
                               ),
                               const SizedBox(height: 4),
@@ -1666,7 +1856,7 @@ Widget _buildWeeklyMetricChart(String title, Color color, Stream<List<Map<String
             Icons.chat_bubble_outline,
             const Color(0xFF16A34A),
             const Color(0xFFDCFCE7),
-            () {
+                () {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const AIChatScreen()),
@@ -1682,7 +1872,7 @@ Widget _buildWeeklyMetricChart(String title, Color color, Stream<List<Map<String
             Icons.spa_outlined,
             const Color(0xFFEA580C),
             const Color(0xFFFFEDD5),
-            () {
+                () {
               Navigator.push(
                 context,
                 MaterialPageRoute(builder: (context) => const HealingScreen()),

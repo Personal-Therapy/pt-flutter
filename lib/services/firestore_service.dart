@@ -121,11 +121,17 @@ class FirestoreService {
         .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
   }
 
-  // [신규] AI Chat 감정 분석 점수 저장 및 집계 업데이트
-  Future<void> updateAIChatScore(String uid, int aiScore) async {
+// [신규] AI Chat 감정 분석 점수 저장 및 집계 업데이트 (수정됨: 감정 데이터 추가)
+  Future<void> updateAIChatScore(
+      String uid,
+      int aiScore, {
+        // 💡 Map<String, int> 타입의 감정 데이터를 받도록 추가
+        required Map<String, int> emotions,
+      }) async {
     // 1. AI 분석 기록 저장
     await _db.collection('users').doc(uid).collection('ai_chat_scores').add({
       'score': aiScore,
+      'emotions': emotions, // 💡 감정 데이터 저장
       'timestamp': FieldValue.serverTimestamp(),
     });
 
@@ -394,6 +400,15 @@ class FirestoreService {
         .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
   }
 
+  // AI Chat 감정 분석 점수 전체 리스트 가져오기 (감정 분포 계산에 사용)
+  Stream<List<Map<String, dynamic>>> getAIChatScoresStream(String uid) {
+    // timestamp를 기준으로 내림차순 정렬하여 모든 AI 챗 스코어 기록을 가져옵니다.
+    return _db.collection('users').doc(uid).collection('ai_chat_scores')
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
+  }
+
   /// health_data 컬렉션에서 건강 데이터 스트림 가져오기
   Stream<List<Map<String, dynamic>>> getHealthDataStream(String userId) {
     return FirebaseFirestore.instance
@@ -403,5 +418,58 @@ class FirestoreService {
         .orderBy('timestamp', descending: false)
         .snapshots()
         .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
+  }
+
+  // ==================== 채팅 메시지 저장/불러오기 ====================
+
+  /// 채팅 메시지 저장
+  Future<void> saveChatMessage({
+    required String uid,
+    required String text,
+    required bool isUser,
+    Map<String, dynamic>? emotionAnalysis,
+  }) async {
+    await _db.collection('users').doc(uid).collection('chat_messages').add({
+      'text': text,
+      'isUser': isUser,
+      'timestamp': FieldValue.serverTimestamp(),
+      if (emotionAnalysis != null) 'emotionAnalysis': emotionAnalysis,
+    });
+  }
+
+  /// 채팅 메시지 불러오기 (시간순 정렬)
+  Future<List<Map<String, dynamic>>> getChatMessages(String uid) async {
+    final snapshot = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('chat_messages')
+        .orderBy('timestamp', descending: false)
+        .get();
+
+    return snapshot.docs.map((doc) => doc.data()).toList();
+  }
+
+  /// 채팅 메시지 스트림 (실시간 업데이트용)
+  Stream<List<Map<String, dynamic>>> getChatMessagesStream(String uid) {
+    return _db
+        .collection('users')
+        .doc(uid)
+        .collection('chat_messages')
+        .orderBy('timestamp', descending: false)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
+  }
+
+  /// 모든 채팅 메시지 삭제 (새 대화 시작용)
+  Future<void> clearChatMessages(String uid) async {
+    final snapshot = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('chat_messages')
+        .get();
+
+    for (var doc in snapshot.docs) {
+      await doc.reference.delete();
+    }
   }
 }

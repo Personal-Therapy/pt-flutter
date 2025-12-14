@@ -19,17 +19,118 @@ class AIChatScreen extends StatefulWidget {
 class _AIChatScreenState extends State<AIChatScreen> {
   final TextEditingController _textController = TextEditingController();
   final List<_ChatMessage> _messages = [];
+  final FirestoreService _firestoreService = FirestoreService();
   bool _isSending = false;
+  bool _isLoading = true;
+  String? _userId;
 
   @override
   void initState() {
     super.initState();
-    _messages.add(
-      _ChatMessage(
-        text: '안녕하세요! 저는 마음케어 AI 상담사입니다. 오늘 하루는 어떠셨나요?',
-        isUser: false,
+    _userId = FirebaseAuth.instance.currentUser?.uid;
+    _loadChatHistory();
+  }
+
+  /// 이전 채팅 기록 불러오기
+  Future<void> _loadChatHistory() async {
+    if (_userId == null) {
+      setState(() {
+        _isLoading = false;
+        _messages.add(
+          _ChatMessage(
+            text: '안녕하세요! 저는 마음케어 AI 상담사입니다. 오늘 하루는 어떠셨나요?',
+            isUser: false,
+          ),
+        );
+      });
+      return;
+    }
+
+    try {
+      final messages = await _firestoreService.getChatMessages(_userId!);
+
+      setState(() {
+        if (messages.isEmpty) {
+          // 저장된 메시지가 없으면 기본 인사말 추가
+          _messages.add(
+            _ChatMessage(
+              text: '안녕하세요! 저는 마음케어 AI 상담사입니다. 오늘 하루는 어떠셨나요?',
+              isUser: false,
+            ),
+          );
+          // 기본 인사말도 저장
+          _firestoreService.saveChatMessage(
+            uid: _userId!,
+            text: '안녕하세요! 저는 마음케어 AI 상담사입니다. 오늘 하루는 어떠셨나요?',
+            isUser: false,
+          );
+        } else {
+          // 저장된 메시지 불러오기
+          for (var msg in messages) {
+            _messages.add(
+              _ChatMessage(
+                text: msg['text'] ?? '',
+                isUser: msg['isUser'] ?? false,
+              ),
+            );
+          }
+        }
+        _isLoading = false;
+      });
+    } catch (e) {
+      debugPrint('[CHAT_LOAD_ERROR] $e');
+      setState(() {
+        _isLoading = false;
+        _messages.add(
+          _ChatMessage(
+            text: '안녕하세요! 저는 마음케어 AI 상담사입니다. 오늘 하루는 어떠셨나요?',
+            isUser: false,
+          ),
+        );
+      });
+    }
+  }
+
+  /// 새 대화 시작 (기존 대화 삭제)
+  Future<void> _startNewConversation() async {
+    if (_userId == null) return;
+
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('새 대화 시작'),
+        content: const Text('기존 대화 내용이 모두 삭제됩니다. 계속하시겠습니까?'),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('취소'),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('확인', style: TextStyle(color: Colors.red)),
+          ),
+        ],
       ),
     );
+
+    if (confirmed == true) {
+      await _firestoreService.clearChatMessages(_userId!);
+      setState(() {
+        _messages.clear();
+        _messages.add(
+          _ChatMessage(
+            text: '안녕하세요! 저는 마음케어 AI 상담사입니다. 오늘 하루는 어떠셨나요?',
+            isUser: false,
+          ),
+        );
+      });
+      // 기본 인사말 저장
+      await _firestoreService.saveChatMessage(
+        uid: _userId!,
+        text: '안녕하세요! 저는 마음케어 AI 상담사입니다. 오늘 하루는 어떠셨나요?',
+        isUser: false,
+      );
+    }
   }
 
   @override
@@ -267,6 +368,15 @@ $userMessage
       );
     });
 
+    // 💾 사용자 메시지 Firestore에 저장
+    if (_userId != null) {
+      await _firestoreService.saveChatMessage(
+        uid: _userId!,
+        text: text,
+        isUser: true,
+      );
+    }
+
     try {
       // 🧠 감정 분석 + 답변 생성 병렬 실행
       final results = await Future.wait([
@@ -286,17 +396,23 @@ $userMessage
       debugPrint('[SCORE] 최종 점수: ${analysis.finalScoreB3.round()} / 100');
 
       // Firestore에 B-3 방식 점수 저장
-      final userId = FirebaseAuth.instance.currentUser?.uid;
-      if (userId != null) {
-        final firestoreService = FirestoreService();
-
-        // [수정됨] 직접 updateDailyMentalStatus를 부르지 않고,
-        // 헬퍼 함수인 updateAIChatScore를 호출하여 로그 저장 + 점수 집계를 동시에 수행합니다.
+      if (_userId != null) {
         int aiScore = analysis.finalScoreB3.round();
 
-        await firestoreService.updateAIChatScore(userId, aiScore);
+        // 감정 데이터와 함께 점수 저장
+        await _firestoreService.updateAIChatScore(
+          _userId!,
+          aiScore,
+          emotions: analysis.emotions.cast<String, int>(),
+        );
+        debugPrint('[AI_CHAT] Firestore 저장 완료! AI 점수: $aiScore, 감정: ${analysis.emotions}');
 
-        debugPrint('[AI_CHAT] Firestore 저장 완료! AI 점수: $aiScore');
+        // 💾 AI 응답 메시지 Firestore에 저장
+        await _firestoreService.saveChatMessage(
+          uid: _userId!,
+          text: reply,
+          isUser: false,
+        );
       }
 
       setState(() {
@@ -360,12 +476,31 @@ $userMessage
           ),
         ),
         centerTitle: true,
+        actions: [
+          // 새 대화 시작 버튼
+          IconButton(
+            icon: const Icon(Icons.refresh_rounded),
+            tooltip: '새 대화 시작',
+            onPressed: _startNewConversation,
+          ),
+        ],
       ),
       body: Column(
         children: [
           // 채팅 메시지 영역
           Expanded(
-            child: ListView.builder(
+            child: _isLoading
+                ? const Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  CircularProgressIndicator(),
+                  SizedBox(height: 16),
+                  Text('대화 기록을 불러오는 중...'),
+                ],
+              ),
+            )
+                : ListView.builder(
               padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 16),
               itemCount: _messages.length,
               itemBuilder: (context, index) {
