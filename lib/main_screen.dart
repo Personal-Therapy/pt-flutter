@@ -348,65 +348,64 @@ class _HomeScreenContentState extends State<_HomeScreenContent> {
                 _buildMoodCheckCard(),
                 const SizedBox(height: 24.0),
 
-                Row(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Expanded(
-                      child: InkWell(
-                        borderRadius: BorderRadius.circular(16.0),
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(
-                              builder: (context) => const DiagnosisScreen(),
+                IntrinsicHeight( // <-- 1. IntrinsicHeight 추가
+                  child: Row(
+                    // [수정] stretch를 사용하여 자식 위젯들이 IntrinsicHeight에 맞춰 늘어나도록 합니다.
+                    crossAxisAlignment: CrossAxisAlignment.stretch, // <-- 2. stretch 설정
+                    children: [
+                      Expanded(
+                        child: InkWell(
+                          borderRadius: BorderRadius.circular(16.0),
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(
+                                builder: (context) => const DiagnosisScreen(),
+                              ),
+                            );
+                          },
+                          child: _buildSmallFeatureCard(
+                            iconWidget: Image.asset(
+                              'assets/images/heart_pulse_icon.png',
+                              width: 48.0,
+                              height: 48.0,
+                              errorBuilder: (context, error, stackTrace) =>
+                              const Icon(Icons.error_outline,
+                                  color: kColorError, size: 48.0),
                             ),
-                          );
-                        },
-                        child: _buildSmallFeatureCard(
-                          iconWidget: Image.asset(
-                            'assets/images/heart_pulse_icon.png',
-                            width: 48.0,
-                            height: 48.0,
-                            errorBuilder: (context, error, stackTrace) =>
-                            const Icon(Icons.error_outline,
-                                color: kColorError, size: 48.0),
+                            title: kTexts['mental_health_title']!,
+                            subtitle: kTexts['mental_health_subtitle']!,
                           ),
-                          title: kTexts['mental_health_title']!,
-                          subtitle: kTexts['mental_health_subtitle']!,
                         ),
                       ),
-                    ),
-                    const SizedBox(width: 5.0),
-// [!!!] 2. '힐링 콘텐츠' 카드를 InkWell로 감쌉니다. [!!!]
-                    // [!!!] 3. '힐링 콘텐츠' 카드를 '웨어러블 기기'로 수정 [!!!]
-                    Expanded(
-                      child: InkWell(
-                        // [!!] 3.1 힐링 스크린 -> 웨어러블 스크린으로 이동
-                        onTap: () {
-                          Navigator.push(
-                            context,
-                            MaterialPageRoute(builder: (context) => const WearableDeviceScreen()),
-                          );
-                        },
-                        borderRadius: BorderRadius.circular(16.0),
-                        child: _buildSmallFeatureCard(
-                          // [!!] 3.2 아이콘 변경 (시계 아이콘 예시)
-                          iconWidget: Image.asset(
-                            'assets/images/icon_watch.png', // 👈 이 경로는 예시입니다.
-                            width: 30.0,
-                            height: 30.0,
-                            errorBuilder: (context, error, stackTrace) =>
-                            const Icon(Icons.watch, // 👈 대체 아이콘
-                                color: kColorError, size: 48.0),
+                      // [수정] 카드 사이 간격을 5.0에서 16.0으로 넓혀 더 균형 있게 만듭니다.
+                      const SizedBox(width: 16.0), // <-- 3. 간격 조정 (선택 사항)
+                      Expanded(
+                        child: InkWell(
+                          onTap: () {
+                            Navigator.push(
+                              context,
+                              MaterialPageRoute(builder: (context) => const WearableDeviceScreen()),
+                            );
+                          },
+                          borderRadius: BorderRadius.circular(16.0),
+                          child: _buildSmallFeatureCard(
+                            iconWidget: Image.asset(
+                              'assets/images/icon_watch.png',
+                              width: 30.0, // 아이콘 크기 통일을 위해 수정 (기존 30.0 -> 48.0 권장)
+                              height: 30.0, // 아이콘 크기 통일을 위해 수정 (기존 30.0 -> 48.0 권장)
+                              errorBuilder: (context, error, stackTrace) =>
+                              const Icon(Icons.watch,
+                                  color: kColorError, size: 48.0),
+                            ),
+                            title: kTexts['wearable_device_title']!,
+                            subtitle: kTexts['wearable_device_subtitle']!,
                           ),
-                          // [!!] 3.3 텍스트 키 변경
-                          title: kTexts['wearable_device_title']!,
-                          subtitle: kTexts['wearable_device_subtitle']!,
                         ),
                       ),
-                    ),
-                  ],
-                ),
+                    ],
+                  ),
+                ), // <-- 4. IntrinsicHeight 닫기
                 const SizedBox(height: 24.0),
 
                 Text(
