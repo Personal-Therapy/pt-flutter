@@ -77,8 +77,11 @@ class _HealthResultPageState extends State<HealthResultPage> {
           aiScore = aiScoreMap.round();
         }
 
-        // 4. 생체 스트레스 (20%) - 이미 건강점수로 변환되어 저장됨
-        final int bioScore = (componentScores['biometricStress'] as num?)?.round() ?? 0;
+        // 4. 생체 스트레스 (20%) - HRV 기반 생체리듬 점수
+        // null이면 데이터 없음으로 처리
+        final num? bioScoreRaw = componentScores['biometricStress'] as num?;
+        final int bioScore = bioScoreRaw?.round() ?? -1; // -1은 데이터 없음 표시용
+        final bool hasBioData = bioScoreRaw != null;
 
         // 상태 정보 가져오기
         final statusInfo = _getStatus(overallScore);
@@ -150,9 +153,17 @@ class _HealthResultPageState extends State<HealthResultPage> {
                 Row(
                   children: [
                     Expanded(
-                      child: _buildDetailCard(
+                      child: hasBioData
+                          ? _buildDetailCard(
                         title: '생체 리듬',
                         score: bioScore,
+                        weight: '20%',
+                        icon: Icons.watch_outlined,
+                        color: Colors.green.shade100,
+                        iconColor: Colors.green,
+                      )
+                          : _buildNoDataCard(
+                        title: '생체 리듬',
                         weight: '20%',
                         icon: Icons.watch_outlined,
                         color: Colors.green.shade100,
@@ -372,6 +383,93 @@ class _HealthResultPageState extends State<HealthResultPage> {
                   style: GoogleFonts.roboto(
                     fontSize: 12,
                     color: Colors.grey,
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
+
+  // 데이터 없음 상태 카드 (생체리듬 등)
+  Widget _buildNoDataCard({
+    required String title,
+    required String weight,
+    required IconData icon,
+    required Color color,
+    required Color iconColor,
+  }) {
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: kColorCardBg,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(0.03),
+            blurRadius: 5,
+            offset: const Offset(0, 2),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(8),
+                decoration: BoxDecoration(
+                  color: color.withOpacity(0.5),
+                  borderRadius: BorderRadius.circular(8),
+                ),
+                child: Icon(icon, color: iconColor.withOpacity(0.5), size: 20),
+              ),
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                decoration: BoxDecoration(
+                  color: Colors.grey.shade100,
+                  borderRadius: BorderRadius.circular(12),
+                ),
+                child: Text(
+                  weight,
+                  style: GoogleFonts.roboto(fontSize: 10, color: Colors.grey.shade600),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 16),
+          Text(
+            title,
+            style: GoogleFonts.roboto(
+              fontSize: 14,
+              color: kColorTextSubtitle,
+              fontWeight: FontWeight.w500,
+            ),
+          ),
+          const SizedBox(height: 4),
+          Row(
+            crossAxisAlignment: CrossAxisAlignment.end,
+            children: [
+              Text(
+                '--',
+                style: GoogleFonts.roboto(
+                  fontSize: 24,
+                  fontWeight: FontWeight.bold,
+                  color: Colors.grey.shade400,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Padding(
+                padding: const EdgeInsets.only(bottom: 4),
+                child: Text(
+                  '데이터 없음',
+                  style: GoogleFonts.roboto(
+                    fontSize: 11,
+                    color: Colors.grey.shade400,
                   ),
                 ),
               ),

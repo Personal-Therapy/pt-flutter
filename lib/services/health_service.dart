@@ -7,7 +7,7 @@ import 'package:flutter/services.dart';
 class HealthService {
   final health.Health _healthFactory = health.Health();
   static const MethodChannel _samsungHealthChannel =
-      MethodChannel('com.project.personaltherapy/samsung_health');
+  MethodChannel('com.project.personaltherapy/samsung_health');
   bool _samsungHealthAvailable = false;
   bool _samsungHealthInitialized = false;
 
@@ -502,7 +502,7 @@ class HealthService {
             hasCalories = true;
             break;
           case health.HealthDataType.HEART_RATE:
-            // 가장 최근 심박수 사용
+          // 가장 최근 심박수 사용
             if (point.dateTo.isAfter(
                 now.subtract(const Duration(minutes: 10)))) {
               currentHR = value.numericValue.round();
@@ -511,7 +511,7 @@ class HealthService {
             break;
           case health.HealthDataType.HEART_RATE_VARIABILITY_SDNN:
           case health.HealthDataType.HEART_RATE_VARIABILITY_RMSSD: // 🆕 RMSSD 추가
-            // 가장 최근 HRV 사용 (SDNN 또는 RMSSD)
+          // 가장 최근 HRV 사용 (SDNN 또는 RMSSD)
             if (point.dateTo.isAfter(
                 now.subtract(const Duration(minutes: 10)))) {
               currentHRV = value.numericValue.round();
@@ -561,7 +561,7 @@ class HealthService {
 
       // 해당 시간대의 데이터 필터링
       final timeSlotData = data.where((point) =>
-          point.dateFrom.isAfter(timeSlotStart) &&
+      point.dateFrom.isAfter(timeSlotStart) &&
           point.dateFrom.isBefore(timeSlotEnd));
 
       if (timeSlotData.isEmpty) {
@@ -582,7 +582,7 @@ class HealthService {
             hrSum += value.numericValue.round();
             hrCount++;
           } else if (point.type == health.HealthDataType.HEART_RATE_VARIABILITY_SDNN ||
-                     point.type == health.HealthDataType.HEART_RATE_VARIABILITY_RMSSD) { // 🆕 RMSSD 추가
+              point.type == health.HealthDataType.HEART_RATE_VARIABILITY_RMSSD) { // 🆕 RMSSD 추가
             hrvSum += value.numericValue.round();
             hrvCount++;
             print('HRV 데이터 발견: ${value.numericValue.round()} ms (${point.type})');
@@ -660,6 +660,62 @@ class HealthService {
     double stressScore = (normalizedHR * 0.6 + normalizedHRV * 0.4) * 100;
 
     return stressScore.round().clamp(0, 100);
+  }
+
+  /// HRV 기반 생체리듬 점수 계산 (0-100)
+  /// HRV RMSSD가 높을수록 건강한 상태 = 높은 점수
+  ///
+  /// HRV 범위 참고 (성인 기준):
+  /// - 20ms 미만: 매우 낮음 (스트레스/피로 상태)
+  /// - 20-40ms: 낮음
+  /// - 40-60ms: 보통
+  /// - 60-80ms: 좋음
+  /// - 80ms 이상: 매우 좋음
+  int? calculateBiorhythmScoreFromHRV(double? hrvRmssd) {
+    if (hrvRmssd == null || hrvRmssd <= 0) {
+      print('⚠️ HRV 데이터 없음 - 생체리듬 점수 계산 불가');
+      return null; // 데이터 없으면 null 반환
+    }
+
+    // HRV를 0-100 점수로 변환
+    // 최소 15ms, 최대 100ms 범위로 정규화
+    const double minHRV = 15.0;
+    const double maxHRV = 100.0;
+
+    double normalizedHRV = ((hrvRmssd - minHRV) / (maxHRV - minHRV)).clamp(0.0, 1.0);
+
+    // 선형 변환으로 점수 계산
+    double score = normalizedHRV * 100;
+
+    int finalScore = score.round().clamp(0, 100);
+
+    print('📊 생체리듬 점수 계산: HRV=$hrvRmssd ms → 점수=$finalScore');
+
+    return finalScore;
+  }
+
+  /// HR과 HRV를 종합하여 생체리듬 점수 계산
+  /// HRV가 있으면 HRV 우선, 없으면 HR 기반 추정
+  int? calculateBiorhythmScore({
+    int? heartRate,
+    double? hrvRmssd,
+    int? restingHR,
+  }) {
+    // 1. HRV 데이터가 있으면 HRV 기반 점수 계산
+    if (hrvRmssd != null && hrvRmssd > 0) {
+      return calculateBiorhythmScoreFromHRV(hrvRmssd);
+    }
+
+    // 2. HRV가 없지만 HR이 있으면, HR 기반 추정 HRV로 계산
+    if (heartRate != null) {
+      final estimatedHRV = estimateHRVFromHeartRate(heartRate, restingHR);
+      print('ℹ️ HRV 없음, 심박수 기반 추정 HRV 사용: $estimatedHRV ms');
+      return calculateBiorhythmScoreFromHRV(estimatedHRV.toDouble());
+    }
+
+    // 3. 둘 다 없으면 null
+    print('⚠️ HR, HRV 데이터 모두 없음 - 생체리듬 점수 계산 불가');
+    return null;
   }
 
   /// 사용자 상태 분석

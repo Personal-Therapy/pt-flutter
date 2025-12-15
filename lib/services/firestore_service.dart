@@ -121,11 +121,17 @@ class FirestoreService {
         .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
   }
 
-  // [신규] AI Chat 감정 분석 점수 저장 및 집계 업데이트
-  Future<void> updateAIChatScore(String uid, int aiScore) async {
+// [신규] AI Chat 감정 분석 점수 저장 및 집계 업데이트 (수정됨: 감정 데이터 추가)
+  Future<void> updateAIChatScore(
+      String uid,
+      int aiScore, {
+        // 💡 Map<String, int> 타입의 감정 데이터를 받도록 추가
+        required Map<String, int> emotions,
+      }) async {
     // 1. AI 분석 기록 저장
     await _db.collection('users').doc(uid).collection('ai_chat_scores').add({
       'score': aiScore,
+      'emotions': emotions, // 💡 감정 데이터 저장
       'timestamp': FieldValue.serverTimestamp(),
     });
 
@@ -136,16 +142,54 @@ class FirestoreService {
     );
   }
 
-  // [신규] 생체 데이터 기반 스트레스 점수 저장 및 집계 업데이트
-  Future<void> updateBiometricStress(String uid, int stressScore) async {
+  // [수정] 생체 데이터 기반 생체리듬 점수 저장 (HRV 기반)
+  // stressScore 대신 biorhythmScore로 변경, nullable 지원
+  Future<void> updateBiometricScore(
+      String uid, {
+        int? biorhythmScore,  // HRV 기반 생체리듬 점수 (0-100, 높을수록 좋음)
+        double? hrvValue,     // 원본 HRV RMSSD 값 (ms)
+        int? heartRate,       // 원본 심박수
+      }) async {
+    // 점수가 null이면 저장하지 않음 (데이터 없는 경우)
+    if (biorhythmScore == null) {
+      print('⚠️ 생체리듬 점수가 null - 저장 건너뜀');
+      return;
+    }
+
     await _db.collection('users').doc(uid).collection('biometric_scores').add({
-      'score': stressScore,
+      'score': biorhythmScore,
+      'hrvRmssd': hrvValue,       // 원본 HRV 값 저장 (디버깅/분석용)
+      'heartRate': heartRate,     // 원본 심박수 저장
       'timestamp': FieldValue.serverTimestamp(),
     });
 
     await updateDailyMentalStatus(
       uid: uid,
-      biometricStressScore: stressScore,
+      biometricStressScore: biorhythmScore,
+    );
+  }
+
+  // [레거시 호환] 기존 updateBiometricStress 함수 유지 (하위 호환성)
+  @Deprecated('Use updateBiometricScore instead')
+  Future<void> updateBiometricStress(String uid, int stressScore) async {
+    // 스트레스 점수를 건강 점수로 변환 (100 - 스트레스)
+    // 단, 0이면 데이터 없는 것으로 간주하고 저장하지 않음
+    if (stressScore == 0) {
+      print('⚠️ 스트레스 점수 0 - 데이터 없음으로 간주, 저장 건너뜀');
+      return;
+    }
+
+    final healthScore = (100 - stressScore).clamp(0, 100);
+
+    await _db.collection('users').doc(uid).collection('biometric_scores').add({
+      'score': healthScore,
+      'originalStress': stressScore,  // 원본 스트레스 값 보존
+      'timestamp': FieldValue.serverTimestamp(),
+    });
+
+    await updateDailyMentalStatus(
+      uid: uid,
+      biometricStressScore: healthScore,
     );
   }
 
@@ -287,6 +331,9 @@ class FirestoreService {
     // -----------------------------------------------------------------------
     // D. Firestore 저장
     // -----------------------------------------------------------------------
+    // -----------------------------------------------------------------------
+    // D. Firestore 저장
+    // -----------------------------------------------------------------------
     await docRef.set({
       'date': dateKey,
       'overallScore': finalOverallScore,
@@ -294,11 +341,13 @@ class FirestoreService {
         'selfDiagnosis': selfDiagMap,
         'dailyEmotion': {
           'moodCheck': currentMood,
-          // [중요] 나중에 읽을 때를 대비해 AI 점수는 항상 Map 구조로 통일해서 저장
           'aiConversation': currentAi != null ? {'average': currentAi} : null,
         },
         'biometricStress': currentBio,
       },
+      // [추가됨] 차트가 날짜를 인식할 수 있도록 Timestamp 필드 추가!
+      'timestamp': Timestamp.fromDate(DateTime.now()),
+
       'lastUpdated': FieldValue.serverTimestamp(),
     }, SetOptions(merge: true));
   }
@@ -386,11 +435,106 @@ class FirestoreService {
     });
   }
 
-  // [추가] 일별 종합 점수 리스트 가져오기 (통계 화면용)
+  // 일별 종합 점수 리스트 가져오기 (통계 화면용)
   Stream<List<Map<String, dynamic>>> getDailyMentalStatusListStream(String uid) {
     return _db.collection('users').doc(uid).collection('daily_mental_status')
         .orderBy('date', descending: true)
         .snapshots()
         .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
+  }
+
+  // AI Chat 감정 분석 점수 전체 리스트 가져오기 (감정 분포 계산에 사용)
+  Stream<List<Map<String, dynamic>>> getAIChatScoresStream(String uid) {
+    // timestamp를 기준으로 내림차순 정렬하여 모든 AI 챗 스코어 기록을 가져옵니다.
+    return _db.collection('users').doc(uid).collection('ai_chat_scores')
+        .orderBy('timestamp', descending: true)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
+  }
+
+  /// health_data 컬렉션에서 건강 데이터 스트림 가져오기
+  Stream<List<Map<String, dynamic>>> getHealthDataStream(String userId) {
+    return FirebaseFirestore.instance
+        .collection('users')
+        .doc(userId)
+        .collection('health_data')
+        .orderBy('timestamp', descending: false)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
+  }
+
+  Future<int?> getTodayOverallScore(String uid) async {
+    final dateKey = _getFormattedDateKey(DateTime.now());
+
+    final doc = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('daily_mental_status')
+        .doc(dateKey)
+        .get();
+
+    if (!doc.exists) return null;
+
+    final data = doc.data();
+    if (data == null) return null;
+
+    final score = data['overallScore'];
+    if (score is int) return score;
+    if (score is num) return score.round();
+
+    return null;
+  }
+
+  // ==================== 채팅 메시지 저장/불러오기 ====================
+
+  /// 채팅 메시지 저장
+  Future<void> saveChatMessage({
+    required String uid,
+    required String text,
+    required bool isUser,
+    Map<String, dynamic>? emotionAnalysis,
+  }) async {
+    await _db.collection('users').doc(uid).collection('chat_messages').add({
+      'text': text,
+      'isUser': isUser,
+      'timestamp': FieldValue.serverTimestamp(),
+      if (emotionAnalysis != null) 'emotionAnalysis': emotionAnalysis,
+    });
+  }
+
+  /// 채팅 메시지 불러오기 (시간순 정렬)
+  Future<List<Map<String, dynamic>>> getChatMessages(String uid) async {
+    final snapshot = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('chat_messages')
+        .orderBy('timestamp', descending: false)
+        .get();
+
+    return snapshot.docs.map((doc) => doc.data()).toList();
+  }
+
+  /// 채팅 메시지 스트림 (실시간 업데이트용)
+  Stream<List<Map<String, dynamic>>> getChatMessagesStream(String uid) {
+    return _db
+        .collection('users')
+        .doc(uid)
+        .collection('chat_messages')
+        .orderBy('timestamp', descending: false)
+        .snapshots()
+        .map((snapshot) => snapshot.docs.map((doc) => doc.data()).toList());
+  }
+
+  /// 모든 채팅 메시지 삭제 (새 대화 시작용)
+  Future<void> clearChatMessages(String uid) async {
+    final snapshot = await _db
+        .collection('users')
+        .doc(uid)
+        .collection('chat_messages')
+        .get();
+
+    for (var doc in snapshot.docs) {
+      await doc.reference.delete();
+    }
   }
 }

@@ -1,6 +1,9 @@
 import 'dart:math';
 import 'youtube_service.dart';
 
+import 'dart:math';
+import 'youtube_service.dart';
+
 class HealingRecommendationService {
   final YoutubeService _youtubeService = YoutubeService();
   final HealingKeywordDatabase _database = HealingKeywordDatabase();
@@ -9,11 +12,11 @@ class HealingRecommendationService {
   final SubmodularDiversityOptimizer _diversityOptimizer =
   SubmodularDiversityOptimizer();
 
+  /// 전체 추천 (기존 로직)
   Future<List<Map<String, String>>> getHealingRecommendations({
     required int userScore,
     int totalResults = 10,
   }) async {
-    userScore = 25;//임시하드코딩점수
     print('==== 힐링 추천 시작 (score: $userScore) ====');
 
     final context = _analyzeUserState(userScore);
@@ -44,6 +47,75 @@ class HealingRecommendationService {
     return finalList;
   }
 
+  /// 🆕 카테고리별 영상 추천
+  Future<List<Map<String, String>>> getVideosByCategory({
+    required String category, // '명상', '수면', 'ASMR'
+    required int userScore,
+    int totalResults = 10,
+  }) async {
+    print('==== 카테고리 추천 시작 (category: $category, score: $userScore) ====');
+
+    // 카테고리별 전용 키워드 가져오기
+    final keywords = _database.getCategorySpecificKeywords(category, userScore);
+
+    if (keywords.isEmpty) {
+      print('[경고] 알 수 없는 카테고리: $category');
+      return [];
+    }
+
+    print('[키워드] $category: ${keywords.join(", ")}');
+
+    // 카테고리별 YouTube 카테고리 ID 매핑
+    String? categoryId;
+    if (category == '명상' || category == '수면') {
+      categoryId = '10'; // Music
+    } else if (category == 'ASMR') {
+      categoryId = '22'; // People & Blogs
+    }
+
+    // 영상 수집
+    final candidates = <Map<String, String>>[];
+    final seen = <String>{};
+
+    for (final keyword in keywords) {
+      if (candidates.length >= totalResults * 2) break;
+
+      try {
+        final videos = await _youtubeService.fetchByKeyword(
+          keyword,
+          categoryId: categoryId,
+        );
+
+        for (final v in videos) {
+          final id = v["id"]!;
+          if (!seen.contains(id)) {
+            seen.add(id);
+            candidates.add({
+              ...v,
+              "category": category,
+              "keyword": keyword,
+            });
+          }
+        }
+      } catch (e) {
+        print('[오류] 키워드 "$keyword" 검색 실패: $e');
+        continue;
+      }
+    }
+
+    print('[수집] 후보 영상: ${candidates.length}개');
+
+    // 품질 필터링
+    final context = {"score": userScore};
+    final filtered = _filterByQuality(candidates, context);
+    print('[필터링] 품질 통과: ${filtered.length}개');
+
+    // 다양성 확보
+    final finalList = _ensureDiversity(filtered, totalResults);
+    print('[추천 완료] 최종: ${finalList.length}개');
+
+    return finalList;
+  }
   Map<String, dynamic> _analyzeUserState(int score) {
     final stressLevel = _database.getStressLevel(score);
     final pad = _padCalculator.calculatePAD(score);
@@ -550,5 +622,37 @@ class HealingKeywordDatabase {
     };
 
     return keywords[timeOfDay] ?? '';
+  }
+
+  /// 🆕 카테고리별 전용 키워드 (점수 고려)
+  List<String> getCategorySpecificKeywords(String category, int userScore) {
+    final stressLevel = getStressLevel(userScore);
+
+    final categoryKeywords = {
+      '명상': {
+        'critical': ['깊은 명상 음악', '마음챙김 명상', '수면 유도 명상', '치유 명상'],
+        'high': ['스트레스 해소 명상', '힐링 명상 음악', '명상 가이드', '자연 명상'],
+        'moderate': ['편안한 명상', '10분 명상', '명상 음악', '힐링 명상'],
+        'low': ['명상 플레이리스트', '명상 브이로그', '짧은 명상'],
+        'minimal': ['기분 전환 명상', '명상 루틴', '일상 명상'],
+      },
+      '수면': {
+        'critical': ['불면증 치료 음악', '깊은 수면 음악', '델타파 수면', '수면 유도'],
+        'high': ['숙면 음악', '수면 명상', '잠 잘 오는 음악', '수면 백색소음'],
+        'moderate': ['편안한 수면 음악', '잠자리 음악', '저녁 수면 음악'],
+        'low': ['수면 플레이리스트', '수면 루틴', '릴렉스 음악'],
+        'minimal': ['잔잔한 음악', '수면 준비 음악', '휴식 음악'],
+      },
+      'ASMR': {
+        'critical': ['깊은 수면 ASMR', 'ASMR 백색소음', '치유 ASMR', '불면증 ASMR'],
+        'high': ['힐링 ASMR', 'ASMR 수면', '릴렉스 ASMR', 'ASMR 명상'],
+        'moderate': ['편안한 ASMR', 'ASMR 소리', 'ASMR 브이로그'],
+        'low': ['ASMR 플레이리스트', '일상 ASMR', 'ASMR 루틴'],
+        'minimal': ['기분 좋은 ASMR', '즐거운 ASMR', 'ASMR 토크'],
+      },
+    };
+
+    final keywords = categoryKeywords[category]?[stressLevel];
+    return keywords ?? [];
   }
 }

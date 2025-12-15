@@ -55,7 +55,7 @@ class _WearableDeviceScreenState extends State<WearableDeviceScreen> {
     // 5분마다 데이터 업데이트
     _dataUpdateTimer = Timer.periodic(
       const Duration(minutes: 5),
-      (timer) => _refreshHealthData(),
+          (timer) => _refreshHealthData(),
     );
   }
 
@@ -177,12 +177,12 @@ class _WearableDeviceScreenState extends State<WearableDeviceScreen> {
   }
 
   /// Health 데이터 새로고침
-  // [수정] 데이터 새로고침 및 Firestore 저장 연결
+  // [수정] 2시간 간격 평균 HRV 기반으로 생체리듬 점수 계산
   Future<void> _refreshHealthData() async {
     try {
       final now = DateTime.now();
 
-      // 1. HealthService에서 데이터 가져오기 (기존 코드)
+      // 1. HealthService에서 실시간 데이터 가져오기
       final healthData = await _healthService.fetchRecentHealthData();
       final oneHourAgo = now.subtract(const Duration(hours: 1));
       final avgHeartData = await _healthService.fetchAverageHeartData(
@@ -198,36 +198,100 @@ class _WearableDeviceScreenState extends State<WearableDeviceScreen> {
         _restingHR = healthData['restingHR'];
       });
 
-      // 2. 사용자 상태 및 스트레스 분석 (기존 코드)
-      _analyzeUserState(); // 이 함수가 _currentStress 값을 업데이트함
+      // 2. 사용자 상태 및 스트레스 분석 (UI 표시용)
+      _analyzeUserState();
 
-      // 3. [중요] Firestore에 생체 점수 저장
+      // 3. 2시간 간격 데이터 로드 (평균 HRV 계산용)
+      await _loadTodayStressLog();
+
+      // 4. [핵심] 2시간 간격 평균 HRV 기반으로 생체리듬 점수 계산 및 저장
       final userId = _currentUserId;
       if (userId != null) {
-        // A. 기존 방식의 로그 저장 (선택 사항)
+        // A. 기존 방식의 로그 저장 (선택 사항 - 실시간 데이터 기록)
         await _healthService.saveHealthDataToFirestore(userId, {
           'steps': _steps,
           'activeCalories': _activeCalories,
           'heartRate': _currentHR,
           'hrv': _currentHRV,
           'restingHR': _restingHR,
-          'stressLevel': _currentStress, // 원본 스트레스 지수 (높을수록 나쁨)
+          'stressLevel': _currentStress,
           'userState': _userState,
           'timestamp': now,
         });
 
-        // B. [신규] 종합 점수 산출을 위한 점수 저장
-        // 스트레스(0~100, 높을수록 나쁨) -> 건강점수(0~100, 높을수록 좋음)로 변환
-        // 예: 스트레스 80 -> 건강점수 20
-        int bioHealthScore = (100 - _currentStress).clamp(0, 100);
+        // B. [수정] 2시간 간격 평균 HRV로 생체리듬 점수 계산
+        final avgHrvData = _calculateAverageHrvFromStressLog();
+        final double? avgHrv = avgHrvData['avgHrv'];
+        final double? avgHrDouble = avgHrvData['avgHr'];
+        final int? avgHr = avgHrDouble?.round();  // double을 int로 변환
 
-        await _firestoreService.updateBiometricStress(userId, bioHealthScore);
+        if (avgHrv != null && avgHrv > 0) {
+          // HRV 기반 생체리듬 점수 계산
+          final int? biorhythmScore = _healthService.calculateBiorhythmScoreFromHRV(avgHrv);
 
-        print('✅ [Wearable] 생체 점수 업데이트 완료: 스트레스 $_currentStress -> 건강점수 $bioHealthScore');
+          if (biorhythmScore != null) {
+            // 새로운 updateBiometricScore 사용
+            await _firestoreService.updateBiometricScore(
+              userId,
+              biorhythmScore: biorhythmScore,
+              hrvValue: avgHrv,
+              heartRate: avgHr,
+            );
+
+            print('✅ [Wearable] 생체리듬 점수 업데이트 완료:');
+            print('   📊 2시간 간격 평균 HRV: ${avgHrv.toStringAsFixed(1)} ms');
+            print('   📊 2시간 간격 평균 HR: $avgHr bpm');
+            print('   🏆 생체리듬 점수: $biorhythmScore / 100');
+          } else {
+            print('⚠️ [Wearable] 생체리듬 점수 계산 실패 - HRV 값 유효하지 않음');
+          }
+        } else {
+          print('⚠️ [Wearable] 2시간 간격 HRV 데이터 없음 - 생체리듬 점수 저장 건너뜀');
+        }
       }
     } catch (e) {
       print('데이터 새로고침 실패: $e');
     }
+  }
+
+  /// 2시간 간격 스트레스 로그에서 평균 HRV와 HR 계산
+  Map<String, double?> _calculateAverageHrvFromStressLog() {
+    if (_stressLog.isEmpty) {
+      return {'avgHrv': null, 'avgHr': null};
+    }
+
+    double totalHrv = 0;
+    double totalHr = 0;
+    int hrvCount = 0;
+    int hrCount = 0;
+
+    for (var log in _stressLog) {
+      // HRV 값 추출
+      final hrv = log['hrv'];
+      if (hrv != null && hrv is num && hrv > 0) {
+        totalHrv += hrv.toDouble();
+        hrvCount++;
+      }
+
+      // HR 값 추출
+      final hr = log['hr'];
+      if (hr != null && hr is num && hr > 0) {
+        totalHr += hr.toDouble();
+        hrCount++;
+      }
+    }
+
+    final double? avgHrv = hrvCount > 0 ? totalHrv / hrvCount : null;
+    final double? avgHr = hrCount > 0 ? totalHr / hrCount : null;
+
+    print('📈 [StressLog 분석] 총 ${_stressLog.length}개 기록');
+    print('   평균 HRV: ${avgHrv?.toStringAsFixed(1) ?? "없음"} ms (${hrvCount}개 데이터)');
+    print('   평균 HR: ${avgHr?.toStringAsFixed(1) ?? "없음"} bpm (${hrCount}개 데이터)');
+
+    return {
+      'avgHrv': avgHrv,
+      'avgHr': avgHr,
+    };
   }
 
   /// 오늘의 스트레스 로그 로드
@@ -297,10 +361,10 @@ class _WearableDeviceScreenState extends State<WearableDeviceScreen> {
                 SizedBox(height: 12),
                 Text(
                   '1. Health Connect 앱을 엽니다\n'
-                  '2. "앱" 탭으로 이동합니다\n'
-                  '3. Samsung Health, Google Fit 등을 선택합니다\n'
-                  '4. "데이터 허용"을 활성화합니다\n'
-                  '5. 걸음 수, 심박수 권한을 허용합니다',
+                      '2. "앱" 탭으로 이동합니다\n'
+                      '3. Samsung Health, Google Fit 등을 선택합니다\n'
+                      '4. "데이터 허용"을 활성화합니다\n'
+                      '5. 걸음 수, 심박수 권한을 허용합니다',
                 ),
                 SizedBox(height: 16),
                 Text(
@@ -310,8 +374,8 @@ class _WearableDeviceScreenState extends State<WearableDeviceScreen> {
                 SizedBox(height: 12),
                 Text(
                   '• Samsung Health나 Google Fit에서 실제로 걸어서 데이터를 생성하세요\n'
-                  '• Health Connect에 데이터 소스가 연결되어 있는지 확인하세요\n'
-                  '• 웨어러블 기기가 Health Connect와 동기화되어 있는지 확인하세요',
+                      '• Health Connect에 데이터 소스가 연결되어 있는지 확인하세요\n'
+                      '• 웨어러블 기기가 Health Connect와 동기화되어 있는지 확인하세요',
                 ),
               ],
             ),
@@ -361,39 +425,39 @@ class _WearableDeviceScreenState extends State<WearableDeviceScreen> {
       ),
       body: _isLoading
           ? const Center(
-              child: Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: [
-                  CircularProgressIndicator(),
-                  SizedBox(height: 16),
-                  Text('건강 데이터를 불러오는 중...',
-                      style: TextStyle(color: kColorTextSubtitle)),
-                ],
-              ),
-            )
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(),
+            SizedBox(height: 16),
+            Text('건강 데이터를 불러오는 중...',
+                style: TextStyle(color: kColorTextSubtitle)),
+          ],
+        ),
+      )
           : RefreshIndicator(
-              onRefresh: () async {
-                await _refreshHealthData();
-                await _loadTodayStressLog();
-              },
-              child: SingleChildScrollView(
-                physics: const AlwaysScrollableScrollPhysics(),
-                padding: const EdgeInsets.all(24.0),
-                child: Column(
-                  children: [
-                    _buildRealtimeMonitoringCard(),
-                    const SizedBox(height: 24),
-                    _buildActivityCard(),
-                    const SizedBox(height: 24),
-                    _buildConnectedDevicesCard(),
-                    const SizedBox(height: 24),
-                    _buildRecommendationCard(),
-                    const SizedBox(height: 24),
-                    _buildHealthConnectInfoCard(),
-                  ],
-                ),
-              ),
-            ),
+        onRefresh: () async {
+          await _refreshHealthData();
+          await _loadTodayStressLog();
+        },
+        child: SingleChildScrollView(
+          physics: const AlwaysScrollableScrollPhysics(),
+          padding: const EdgeInsets.all(24.0),
+          child: Column(
+            children: [
+              _buildRealtimeMonitoringCard(),
+              const SizedBox(height: 24),
+              _buildActivityCard(),
+              const SizedBox(height: 24),
+              _buildConnectedDevicesCard(),
+              const SizedBox(height: 24),
+              _buildRecommendationCard(),
+              const SizedBox(height: 24),
+              _buildHealthConnectInfoCard(),
+            ],
+          ),
+        ),
+      ),
     );
   }
 
@@ -543,14 +607,14 @@ class _WearableDeviceScreenState extends State<WearableDeviceScreen> {
                   const Icon(Icons.watch_off_outlined, size: 48, color: kColorTextHint),
                   const SizedBox(height: 12),
                   Text(
-                    Platform.isIOS
-                        ? 'Apple Health 권한이 필요합니다.'
-                        : 'Health Connect 권한이 필요합니다.',
-                    style: const TextStyle(
-                      color: kColorTextTitle,
-                      fontSize: 16,
-                      fontWeight: FontWeight.w600,
-                    )
+                      Platform.isIOS
+                          ? 'Apple Health 권한이 필요합니다.'
+                          : 'Health Connect 권한이 필요합니다.',
+                      style: const TextStyle(
+                        color: kColorTextTitle,
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      )
                   ),
                   const SizedBox(height: 8),
                   Text(
@@ -611,20 +675,20 @@ class _WearableDeviceScreenState extends State<WearableDeviceScreen> {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: const [
                     Text(
-                      '오늘의 심박수 및 HRV',
-                      style: TextStyle(
-                        fontSize: 16,
-                        fontWeight: FontWeight.w600,
-                        color: kColorTextTitle
-                      )
+                        '오늘의 심박수 및 HRV',
+                        style: TextStyle(
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                            color: kColorTextTitle
+                        )
                     ),
                     SizedBox(height: 4),
                     Text(
-                      '2시간 간격 평균값',
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: kColorTextSubtitle
-                      )
+                        '2시간 간격 평균값',
+                        style: TextStyle(
+                            fontSize: 12,
+                            color: kColorTextSubtitle
+                        )
                     ),
                   ],
                 ),
@@ -738,17 +802,17 @@ class _WearableDeviceScreenState extends State<WearableDeviceScreen> {
                 color: index % 2 == 0 ? Colors.white : kColorBgStart.withOpacity(0.3),
                 borderRadius: isLastRow
                     ? const BorderRadius.only(
-                        bottomLeft: Radius.circular(8),
-                        bottomRight: Radius.circular(8),
-                      )
+                  bottomLeft: Radius.circular(8),
+                  bottomRight: Radius.circular(8),
+                )
                     : null,
                 border: !isLastRow
                     ? const Border(
-                        bottom: BorderSide(
-                          color: Color(0xFFE5E7EB),
-                          width: 1,
-                        ),
-                      )
+                  bottom: BorderSide(
+                    color: Color(0xFFE5E7EB),
+                    width: 1,
+                  ),
+                )
                     : null,
               ),
               child: Row(

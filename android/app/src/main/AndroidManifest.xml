@@ -1,9 +1,5 @@
-<manifest xmlns:android="http://schemas.android.com/apk/res/android">
-
-    <!-- ✅ Health Connect 권한들 (모든 건강 데이터 타입) -->
-
-    <!-- 심장 건강 -->
-    <uses-permission android:name="android.permission.health.READ_HEART_RATE"/>
+<manifest xmlns:android="http://schemas.android.com/apk/res/android"
+    package="com.project.personaltherapy"> <uses-permission android:name="android.permission.health.READ_HEART_RATE"/>
     <uses-permission android:name="android.permission.health.WRITE_HEART_RATE"/>
     <uses-permission android:name="android.permission.health.READ_RESTING_HEART_RATE"/>
     <uses-permission android:name="android.permission.health.WRITE_RESTING_HEART_RATE"/>
@@ -14,11 +10,9 @@
     <uses-permission android:name="android.permission.health.READ_OXYGEN_SATURATION"/>
     <uses-permission android:name="android.permission.health.WRITE_OXYGEN_SATURATION"/>
 
-    <!-- 수면 -->
     <uses-permission android:name="android.permission.health.READ_SLEEP"/>
     <uses-permission android:name="android.permission.health.WRITE_SLEEP"/>
 
-    <!-- 활동 및 운동 -->
     <uses-permission android:name="android.permission.health.READ_STEPS"/>
     <uses-permission android:name="android.permission.health.WRITE_STEPS"/>
     <uses-permission android:name="android.permission.health.READ_DISTANCE"/>
@@ -32,7 +26,6 @@
     <uses-permission android:name="android.permission.health.READ_VO2_MAX"/>
     <uses-permission android:name="android.permission.health.WRITE_VO2_MAX"/>
 
-    <!-- 신체 측정 -->
     <uses-permission android:name="android.permission.health.READ_WEIGHT"/>
     <uses-permission android:name="android.permission.health.WRITE_WEIGHT"/>
     <uses-permission android:name="android.permission.health.READ_HEIGHT"/>
@@ -42,11 +35,9 @@
     <uses-permission android:name="android.permission.health.READ_BASAL_METABOLIC_RATE"/>
     <uses-permission android:name="android.permission.health.WRITE_BASAL_METABOLIC_RATE"/>
 
-    <!-- 수분 섭취 -->
     <uses-permission android:name="android.permission.health.READ_HYDRATION"/>
     <uses-permission android:name="android.permission.health.WRITE_HYDRATION"/>
 
-    <!-- 바이탈 사인 -->
     <uses-permission android:name="android.permission.health.READ_BLOOD_GLUCOSE"/>
     <uses-permission android:name="android.permission.health.WRITE_BLOOD_GLUCOSE"/>
     <uses-permission android:name="android.permission.health.READ_BODY_TEMPERATURE"/>
@@ -54,15 +45,10 @@
     <uses-permission android:name="android.permission.health.READ_RESPIRATORY_RATE"/>
     <uses-permission android:name="android.permission.health.WRITE_RESPIRATORY_RATE"/>
 
-    <!-- 영양 -->
     <uses-permission android:name="android.permission.health.READ_NUTRITION"/>
     <uses-permission android:name="android.permission.health.WRITE_NUTRITION"/>
 
-    <!-- 기타 -->
     <uses-permission android:name="android.permission.INTERNET" />
-
-    <!-- Samsung Health SDK 권한 -->
-    <uses-permission android:name="com.samsung.android.providers.health.permission.READ" />
     <uses-permission android:name="android.permission.BODY_SENSORS" />
 
     <application
@@ -80,16 +66,20 @@
             android:hardwareAccelerated="true"
             android:windowSoftInputMode="adjustResize">
 
-            <!-- Flutter UI 초기 테마 -->
             <meta-data
                 android:name="io.flutter.embedding.android.NormalTheme"
                 android:resource="@style/NormalTheme"
                 />
+
+            <intent-filter>
+                <action android:name="android.intent.action.MAIN"/>
+                <category android:name="android.intent.category.LAUNCHER"/>
+            </intent-filter>
+
             <intent-filter>
                 <action android:name="androidx.health.ACTION_SHOW_PERMISSIONS_RATIONALE" />
             </intent-filter>
 
-            <!-- Android 14 이상 -->
             <intent-filter>
                 <action android:name="android.intent.action.VIEW_PERMISSION_USAGE" />
                 <category android:name="android.intent.category.HEALTH_PERMISSIONS" />
@@ -97,27 +87,17 @@
 
         </activity>
 
-        <!-- [!!] Health Connect 권한 요청을 처리하기 위한 Activity 추가 -->
-        <activity
-            android:name="com.example.health.HealthConnectPermissionActivity"
-            android:exported="true" />
-
-        <!-- Don't delete the meta-data below.
-             This is used by the Flutter tool to generate GeneratedPluginRegistrant.java -->
         <meta-data
             android:name="flutterEmbedding"
             android:value="2" />
 
     </application>
 
-
     <queries>
-        <!-- 기존 PROCESS_TEXT 쿼리 -->
         <intent>
             <action android:name="android.intent.action.PROCESS_TEXT" />
             <data android:mimeType="text/plain" />
         </intent>
-        <!-- [!!] Health Connect가 설치되어 있는지 확인하기 위한 쿼리 추가 -->
         <package android:name="com.google.android.apps.healthdata" />
     </queries>
 </manifest>

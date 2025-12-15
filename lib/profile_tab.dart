@@ -11,7 +11,7 @@ import 'personal_info_screen.dart';
 import 'health_result_page.dart';
 
 // ---------------------------------------------------------------------------
-// [수정] 주석을 풀고 색상을 명확하게 정의했습니다. (오류 해결 핵심)
+// 색상 정의
 // ---------------------------------------------------------------------------
 const Color kColorBtnPrimary = Color(0xFF2563EB);
 const Color kColorCardBg = Colors.white;
@@ -114,7 +114,7 @@ class ProfileTabState extends State<ProfileTab> {
     );
   }
 
-  // 사용자 스탯 카드
+  // 사용자 스탯 카드 (통계 부분 제거됨)
   Widget _buildUserStatsCard() {
     return _buildCardContainer(
       child: StreamBuilder<Map<String, dynamic>?>(
@@ -134,9 +134,6 @@ class ProfileTabState extends State<ProfileTab> {
           final userName = userData['name'] ?? '사용자님';
           final userCreationDate = (userData['createdAt'] as Timestamp?)?.toDate() ?? DateTime.now();
           final daysWithApp = DateTime.now().difference(userCreationDate).inDays;
-          final conversationCount = (userData['conversationCount'] ?? 0).toString();
-          final averageHealthScore = (userData['averageHealthScore'] ?? 0).toString();
-          final healingContentCount = (userData['healingContentCount'] ?? 0).toString();
 
           return Column(
             crossAxisAlignment: CrossAxisAlignment.start,
@@ -149,7 +146,7 @@ class ProfileTabState extends State<ProfileTab> {
                     child: Icon(Icons.person, size: 30, color: kColorBtnPrimary),
                   ),
                   const SizedBox(width: 16),
-                  Expanded(  // ✅ 추가
+                  Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
@@ -159,65 +156,26 @@ class ProfileTabState extends State<ProfileTab> {
                             fontSize: 18,
                             fontWeight: FontWeight.w600,
                           ),
-                          overflow: TextOverflow.ellipsis,  // ✅ 추가
-                          maxLines: 1,  // ✅ 추가
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                         ),
                         const SizedBox(height: 4),
                         Text(
                           'Personal Therapy와 함께한 지 ${daysWithApp}일',
                           style: const TextStyle(fontSize: 14, color: kColorTextSubtitle),
-                          overflow: TextOverflow.ellipsis,  // ✅ 추가
-                          maxLines: 1,  // ✅ 추가
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                         ),
                       ],
                     ),
                   ),
                 ],
               ),
-              const SizedBox(height: 20),
-              Divider(color: Colors.grey[200]),
-              const SizedBox(height: 16),
-              Row(
-                children: [
-                  Expanded(
-                    child: Center(
-                      child: _buildStatItem('대화 횟수', conversationCount, kColorBtnPrimary),
-                    ),
-                  ),
-                  Expanded(
-                    child: Center(
-                      child: _buildStatItem('평균 건강 점수', averageHealthScore, kPrimaryGreen),
-                    ),
-                  ),
-                  Expanded(
-                    child: Center(
-                      child: _buildStatItem('힐링 콘텐츠', healingContentCount, kPrimaryPurple),
-                    ),
-                  ),
-                ],
-              ),
+              // 하단 통계 부분 제거됨
             ],
           );
         },
       ),
-    );
-  }
-
-  // 스탯 아이템
-  Widget _buildStatItem(String title, String value, Color color) {
-    return Column(
-      children: [
-        Text(title, style: TextStyle(fontSize: 12, color: kColorTextSubtitle)),
-        SizedBox(height: 4),
-        Text(
-          value,
-          style: TextStyle(
-            fontSize: 24,
-            fontWeight: FontWeight.bold,
-            color: color,
-          ),
-        ),
-      ],
     );
   }
 
@@ -258,7 +216,7 @@ class ProfileTabState extends State<ProfileTab> {
                           Navigator.push(
                             context,
                             MaterialPageRoute(
-                              builder: (_) => HealthResultPage(), // userData 넘기지 않음 (페이지 내부에서 stream으로 조회)
+                              builder: (_) => HealthResultPage(),
                             ),
                           );
                         }
@@ -282,71 +240,130 @@ class ProfileTabState extends State<ProfileTab> {
             ],
           ),
           const SizedBox(height: 16),
-          StreamBuilder<Map<String, dynamic>?>(
-            stream: _currentUserId != null ? _firestoreService.getUserStream(_currentUserId!) : null,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return const Center(child: CircularProgressIndicator());
-              }
-              final userData = snapshot.data ?? {};
-              // 여기서는 평균 점수(users 컬렉션)를 보여줄지, 오늘 점수(daily)를 보여줄지 결정해야 함.
-              // 일단 기존대로 averageHealthScore 표시
-              final healthScore = (userData['averageHealthScore'] ?? 'N/A').toString();
+          // ✅ 수정: 건강 점수, 수면 시간, 걸음 수를 Firestore에서 가져오기
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              // 1. 건강 점수 (정신건강 종합 점수 - overallScore)
+              Expanded(
+                child: StreamBuilder<Map<String, dynamic>?>(
+                  // [변경] 리스트 스트림(List) 대신, 날짜 기반 단일 문서 스트림(Map)을 사용합니다.
+                  // _firestoreService에 getDailyMentalStatusStream 함수가 정의되어 있어야 합니다.
+                  stream: _currentUserId != null
+                      ? _firestoreService.getDailyMentalStatusStream(_currentUserId!, DateTime.now())
+                      : null,
+                  builder: (context, snapshot) {
+                    // 1. 로딩 중일 때
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const StatusItem(icon: Icons.favorite, title: '건강 점수', value: '...');
+                    }
 
-              return Row(
-                mainAxisAlignment: MainAxisAlignment.spaceAround,
-                children: [
-                  Expanded(child: StatusItem(icon: Icons.favorite, title: '건강 점수', value: healthScore)),
-                  Expanded(
-                    child: GestureDetector(
-                      onTap: () => _showSleepTimeInputDialog(context),
-                      child: StreamBuilder<List<Map<String, dynamic>>>(
-                        stream: _currentUserId != null ? _firestoreService.getSleepScoresStream(_currentUserId!) : null,
-                        builder: (context, sleepSnapshot) {
-                          if (sleepSnapshot.connectionState == ConnectionState.waiting) {
-                            return const StatusItem(icon: Icons.hotel, title: '수면 시간', value: '...');
-                          }
+                    // 2. 데이터가 아예 없거나(null), 아직 오늘의 기록이 없는 경우
+                    if (!snapshot.hasData || snapshot.data == null) {
+                      // 오늘의 기록이 없을 때 '0' 또는 'N/A' 등으로 표시
+                      return const StatusItem(icon: Icons.favorite, title: '건강 점수', value: 'N/A');
+                    }
 
-                          List<Map<String, dynamic>> sleepData = sleepSnapshot.data ?? [];
-                          double totalDuration = 0.0;
-                          int count = 0;
+                    final data = snapshot.data!;
 
-                          // 최근 7일간의 평균 수면 시간 계산
-                          final now = DateTime.now();
-                          final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
-                          final endOfWeek = startOfWeek.add(const Duration(days: 6));
+                    // 3. [핵심] updateDailyMentalStatus 함수가 저장한 'overallScore' 필드 가져오기
+                    final score = (data['overallScore'] as num?)?.toInt() ?? 0;
 
-                          final filteredData = sleepData.where((record) {
-                            final timestamp = record['timestamp'] as Timestamp?;
-                            return timestamp != null &&
-                                timestamp.toDate().isAfter(startOfWeek.subtract(const Duration(days: 1))) &&
-                                timestamp.toDate().isBefore(endOfWeek.add(const Duration(days: 1)));
-                          }).toList();
+                    return StatusItem(icon: Icons.favorite, title: '건강 점수', value: '$score');
+                  },
+                ),
+              ),
 
-                          for (var record in filteredData) {
-                            try {
-                              totalDuration += (record['duration'] as num).toDouble();
-                              count++;
-                            } catch (e) { }
-                          }
+              // 2. 수면 시간 (기존 유지)
+              Expanded(
+                child: GestureDetector(
+                  onTap: () => _showSleepTimeInputDialog(context),
+                  child: StreamBuilder<List<Map<String, dynamic>>>(
+                    stream: _currentUserId != null ? _firestoreService.getSleepScoresStream(_currentUserId!) : null,
+                    builder: (context, sleepSnapshot) {
+                      if (sleepSnapshot.connectionState == ConnectionState.waiting) {
+                        return const StatusItem(icon: Icons.hotel, title: '수면 시간', value: '...');
+                      }
 
-                          String averageSleep = count > 0 ? (totalDuration / count).toStringAsFixed(1) : 'N/A';
+                      List<Map<String, dynamic>> sleepData = sleepSnapshot.data ?? [];
+                      double totalDuration = 0.0;
+                      int count = 0;
 
-                          return StatusItem(icon: Icons.hotel, title: '수면 시간', value: '$averageSleep 시간');
-                        },
-                      ),
-                    ),
+                      // 최근 7일간의 평균 수면 시간 계산
+                      final now = DateTime.now();
+                      final startOfWeek = now.subtract(Duration(days: now.weekday - 1));
+                      final endOfWeek = startOfWeek.add(const Duration(days: 6));
+
+                      final filteredData = sleepData.where((record) {
+                        final ts = record['timestamp'];
+                        if (ts == null || ts is! Timestamp) return false;
+                        return ts.toDate().isAfter(startOfWeek.subtract(const Duration(days: 1))) &&
+                            ts.toDate().isBefore(endOfWeek.add(const Duration(days: 1)));
+                      }).toList();
+
+                      for (var record in filteredData) {
+                        try {
+                          totalDuration += (record['duration'] as num?)?.toDouble() ?? 0.0;
+                          count++;
+                        } catch (e) { }
+                      }
+
+                      String averageSleep = count > 0 ? (totalDuration / count).toStringAsFixed(1) : 'N/A';
+
+                      return StatusItem(icon: Icons.hotel, title: '수면 시간', value: '$averageSleep 시간');
+                    },
                   ),
-                  Expanded(
-                    child: StatusItem(
+                ),
+              ),
+
+              // 3. 걸음 수 (Firestore health_data에서 가져오기)
+              Expanded(
+                child: StreamBuilder<List<Map<String, dynamic>>>(
+                  stream: _currentUserId != null
+                      ? _firestoreService.getHealthDataStream(_currentUserId!)
+                      : null,
+                  builder: (context, snapshot) {
+                    // Firestore 데이터가 없으면 Health API 데이터 사용 (폴백)
+                    if (!snapshot.hasData || snapshot.data!.isEmpty) {
+                      return StatusItem(
+                        icon: Icons.directions_walk,
+                        title: '걸음 수',
+                        value: _stepCount > 0 ? _stepCount.toString() : 'N/A',
+                      );
+                    }
+
+                    // 오늘의 걸음 수 데이터 가져오기
+                    final now = DateTime.now();
+                    final startOfDay = DateTime(now.year, now.month, now.day);
+
+                    final todayData = snapshot.data!.where((item) {
+                      final ts = item['timestamp'];
+                      if (ts == null || ts is! Timestamp) return false;
+                      final timestamp = ts.toDate();
+                      return timestamp.isAfter(startOfDay);
+                    }).toList();
+
+                    if (todayData.isEmpty) {
+                      return StatusItem(
+                        icon: Icons.directions_walk,
+                        title: '걸음 수',
+                        value: _stepCount > 0 ? _stepCount.toString() : 'N/A',
+                      );
+                    }
+
+                    // 오늘의 최신 걸음 수
+                    final latestData = todayData.last;
+                    final steps = (latestData['steps'] as num?)?.toInt() ?? _stepCount;
+
+                    return StatusItem(
                       icon: Icons.directions_walk,
                       title: '걸음 수',
-                      value: _stepCount.toString(),
-                    ),
-                  ),
-                ],
-              );
-            },
+                      value: steps.toString(),
+                    );
+                  },
+                ),
+              ),
+            ],
           ),
         ],
       ),
